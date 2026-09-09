@@ -18,4 +18,12 @@ describe('assertSafeRegex', () => {
   it('rechaza un patron excesivamente largo', () => {
     expect(() => assertSafeRegex('a'.repeat(1001))).toThrow(UnsafeRegexError);
   });
+
+  it('rechaza cuantificador ? interno seguido de repeticion externa', () => {
+    expect(() => assertSafeRegex('(a?)+$')).toThrow(UnsafeRegexError);
+  });
+
+  it('rechaza cuantificador acotado {n,} como repeticion externa', () => {
+    expect(() => assertSafeRegex('(a+){50,}$')).toThrow(UnsafeRegexError);
+  });
 });
