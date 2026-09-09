@@ -44,9 +44,11 @@ rules:
     risk: low
     confidence: 0.5
     match:
-      any:
-        - glob: "**/*.crt"
-        - glob: "**/*.cer"
+      all:
+        - any:
+            - glob: "**/*.crt"
+            - glob: "**/*.cer"
+        - is_file: true
     suggests:
       - type: review
 

@@ -47,7 +47,7 @@ rules:
     confidence: 0.7
     match:
       all:
-        - basename_regex: '(?i)[-_ ](final|v[0-9]+|copy|backup|old|prueba|temp)[0-9]*(\.[^.]+)?$'
+        - basename_regex: '(?i)[-_ ](final|copy|backup|old|prueba|temp)[0-9]*(\.[^.]+)?$'
         - is_file: true
     evidence: [size, mtime]
     suggests:

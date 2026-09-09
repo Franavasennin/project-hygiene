@@ -31,7 +31,8 @@ rules:
       all:
         - path_regex: '^[^/]+\.(sh|mjs|cjs|py)$'
         - none:
-            - basename_regex: '^(setup|install|build|release)\.'
+            - basename_regex: '^(setup|install|build|release|manage)\.'
+            - basename_regex: '\.config\.(mjs|cjs|js)$'
         - is_file: true
     suggests:
       - type: review
