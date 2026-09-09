@@ -32,14 +32,17 @@ export function computeScore(findings: Finding[], limits: LimitHit[]): Score {
   let total = 0;
   for (const axis of Object.keys(WEIGHT) as Axis[]) {
     const value = WEIGHT[axis] * Math.max(0, 1 - penalty[axis] / SATURATION[axis]);
-    axes[axis] = Math.round(value * 100) / 100;
-    total += value;
+    const rounded = Math.round(value * 100) / 100;
+    axes[axis] = rounded;
+    total += rounded;
   }
-  // Nota: no redondeamos el total a entero aqui. Redondear (p.ej. Math.round)
-  // colapsa deltas pequenos que caen justo en un limite .5 (p.ej. 99.5 -> 100),
-  // lo que puede borrar por completo la penalizacion de un unico hallazgo de
-  // severidad baja. Mantener precision de punto flotante preserva la relacion
-  // lineal entre penalizacion y baja de puntuacion.
+  total = Math.round(total * 100) / 100;
+  // Redondeamos total a 2 decimales, igual que cada eje individual, en vez de
+  // a entero. Redondear a entero (Math.round simple) colapsa deltas pequenos
+  // que caen justo en un limite .5 (99.5 -> 100), borrando por completo la
+  // penalizacion de un unico hallazgo de severidad baja. Redondear a 2
+  // decimales preserva esa penalizacion visible y ademas garantiza que total
+  // sea exactamente la suma de los axes mostrados, sin ruido de coma flotante.
 
   const blockers: string[] = [];
 

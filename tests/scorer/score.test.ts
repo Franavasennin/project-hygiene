@@ -43,4 +43,23 @@ describe('computeScore', () => {
     expect(s.clean).toBe(false);
     expect(s.blockers.join(' ')).toContain('FS-TEMP-001');
   });
+
+  // Calculo manual para el hallazgo low por defecto (axis filesystem):
+  // penalty.filesystem = SEVERITY_WEIGHT.low * sqrt(1) = 1 * 1 = 1
+  // value = WEIGHT.filesystem * (1 - penalty/SATURATION.filesystem)
+  //       = 30 * (1 - 1/60) = 30 * (59/60) = 29.5
+  // axes.filesystem = round(29.5 * 100) / 100 = 29.5
+  // resto de ejes sin penalizacion: git 25, security 30, ai 15
+  // total = 29.5 + 25 + 30 + 15 = 99.5
+  it('un unico hallazgo low no desaparece al redondear (regresion)', () => {
+    const s = computeScore([f({ severity: 'low' })], []);
+    expect(s.total).toBe(99.5);
+    expect(s.axes.filesystem).toBe(29.5);
+  });
+
+  it('total es exactamente la suma de los axes mostrados', () => {
+    const s = computeScore([f({ severity: 'medium', axis: 'git', ruleId: 'GIT-DIRTY-001' })], []);
+    const sumaEjes = Object.values(s.axes).reduce((a, b) => a + b, 0);
+    expect(s.total).toBeCloseTo(sumaEjes, 10);
+  });
 });
