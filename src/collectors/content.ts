@@ -34,11 +34,12 @@ export interface ContentCache {
 }
 
 export function createContentCache(budget: Budget): ContentCache {
+  const buffers = new Map<string, Buffer | null>();
   const texts = new Map<string, string | null>();
   const hashes = new Map<string, string | null>();
 
   async function load(entry: FileEntry): Promise<Buffer | null> {
-    if (entry.isDir) return null;
+    if (entry.isDir || entry.isSymlink) return null;
     if (entry.size > budget.limits.maxFileSizeForContentScan) {
       budget.note('maxFileSizeForContentScan');
       return null;
@@ -50,10 +51,17 @@ export function createContentCache(budget: Budget): ContentCache {
     }
   }
 
+  async function loadCached(entry: FileEntry): Promise<Buffer | null> {
+    if (buffers.has(entry.path)) return buffers.get(entry.path) ?? null;
+    const buf = await load(entry);
+    buffers.set(entry.path, buf);
+    return buf;
+  }
+
   return {
     async text(entry) {
       if (texts.has(entry.path)) return texts.get(entry.path) ?? null;
-      const buf = await load(entry);
+      const buf = await loadCached(entry);
       const value = buf && !looksBinary(buf)
         ? buf.toString('utf8').slice(0, budget.limits.maxRegexInputLength)
         : null;
@@ -62,7 +70,7 @@ export function createContentCache(budget: Budget): ContentCache {
     },
     async hash(entry) {
       if (hashes.has(entry.path)) return hashes.get(entry.path) ?? null;
-      const buf = await load(entry);
+      const buf = await loadCached(entry);
       const value = buf ? sha256(buf) : null;
       hashes.set(entry.path, value);
       return value;
