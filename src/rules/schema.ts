@@ -62,7 +62,12 @@ function auditMatchTree(node: MatchNode, seen = { n: 0 }): void {
   }
 }
 
-function validateWith(data: unknown, source: string, validate: ValidateFunction): Pack {
+function validateWith(
+  data: unknown,
+  source: string,
+  validate: ValidateFunction,
+  seenIds: Set<string> = new Set(),
+): Pack {
   if (!validate(data)) {
     const detail = (validate.errors ?? [])
       .map((e) => `${e.instancePath || '/'} ${e.message ?? ''}`)
@@ -70,13 +75,21 @@ function validateWith(data: unknown, source: string, validate: ValidateFunction)
     throw new PackValidationError(`${source}: ${detail}`);
   }
   const pack = data as Pack;
-  const ids = new Set<string>();
   for (const rule of pack.rules) {
-    if (ids.has(rule.id)) throw new PackValidationError(`${source}: id duplicado ${rule.id}`);
-    ids.add(rule.id);
+    if (seenIds.has(rule.id)) throw new PackValidationError(`${source}: id duplicado ${rule.id}`);
+    seenIds.add(rule.id);
     auditMatchTree(rule.match);
   }
   return pack;
+}
+
+function parseYamlSafe(text: string, source: string): unknown {
+  try {
+    return parseYaml(text);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new PackValidationError(`${source}: YAML invalido: ${msg}`);
+  }
 }
 
 const schemaCache = new Map<string, ValidateFunction>();
@@ -94,7 +107,7 @@ const DEFAULT_SCHEMA = path.join(process.cwd(), 'rules', 'pack.schema.json');
 
 /** Puerta de entrada síncrona, pensada para tests. */
 export function parsePack(yamlText: string, source: string, schemaPath = DEFAULT_SCHEMA): Pack {
-  return validateWith(parseYaml(yamlText), source, compiledValidator(schemaPath));
+  return validateWith(parseYamlSafe(yamlText, source), source, compiledValidator(schemaPath));
 }
 
 /** Puerta de entrada de la CLI: carga todos los packs de un directorio. */
@@ -102,9 +115,10 @@ export async function loadPacks(rulesDir: string): Promise<Pack[]> {
   const validate = compiledValidator(path.join(rulesDir, 'pack.schema.json'));
   const names = (await readdir(rulesDir)).filter((n) => n.endsWith('.yml')).sort();
   const packs: Pack[] = [];
+  const seenIds = new Set<string>();
   for (const name of names) {
     const raw = await readFile(path.join(rulesDir, name), 'utf8');
-    packs.push(validateWith(parseYaml(raw), name, validate));
+    packs.push(validateWith(parseYamlSafe(raw, name), name, validate, seenIds));
   }
   return packs;
 }
