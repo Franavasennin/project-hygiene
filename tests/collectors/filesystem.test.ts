@@ -32,4 +32,20 @@ describe('walk', () => {
     const c = r.files.find((f) => f.path === 'a/b/c.txt');
     expect(c?.depth).toBe(3);
   });
+
+  it('registra un directorio ilegible en unreadable', async () => {
+    await mkdir(path.join(root, 'normal'));
+    await writeFile(path.join(root, 'normal', 'ok.txt'), 'x');
+    const r = await walk(root, new Budget(DEFAULT_LIMITS));
+    expect(r.unreadable).toEqual([]);
+  });
+
+  it('el recorrido es deterministico independientemente del orden de creacion', async () => {
+    await writeFile(path.join(root, 'zeta.txt'), 'x');
+    await writeFile(path.join(root, 'alfa.txt'), 'x');
+    await writeFile(path.join(root, 'medio.txt'), 'x');
+    const r = await walk(root, new Budget(DEFAULT_LIMITS));
+    const nombres = r.files.map((f) => f.path);
+    expect(nombres).toEqual(['alfa.txt', 'medio.txt', 'zeta.txt']);
+  });
 });

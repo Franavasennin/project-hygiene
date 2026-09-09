@@ -12,18 +12,29 @@ export const GENERATED_DIRS = new Set([
 export interface WalkResult {
   files: FileEntry[];
   truncated: boolean;
+  unreadable: string[];
 }
+
+/** Tope defensivo contra desbordamiento de pila en arboles patologicos. No es
+ * parte del sistema de limites configurable: es una salvaguarda dura. */
+const MAX_SAFE_DEPTH = 1000;
 
 export async function walk(root: string, budget: Budget): Promise<WalkResult> {
   const files: FileEntry[] = [];
+  const unreadable: string[] = [];
   let truncated = false;
 
   async function visit(absDir: string, relDir: string, depth: number): Promise<void> {
     if (truncated) return;
     let entries;
     try {
-      entries = await readdir(absDir, { withFileTypes: true });
+      entries = (await readdir(absDir, { withFileTypes: true })).sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
     } catch {
+      if (relDir !== '') {
+        unreadable.push(relDir);
+      }
       return;
     }
 
@@ -36,6 +47,7 @@ export async function walk(root: string, budget: Budget): Promise<WalkResult> {
       try {
         st = await lstat(abs);
       } catch {
+        unreadable.push(rel);
         continue;
       }
 
@@ -58,12 +70,12 @@ export async function walk(root: string, budget: Budget): Promise<WalkResult> {
         notDescended: generated,
       });
 
-      if (isDir && !generated && !st.isSymbolicLink()) {
+      if (isDir && !generated && !st.isSymbolicLink() && depth + 1 < MAX_SAFE_DEPTH) {
         await visit(abs, rel, depth + 1);
       }
     }
   }
 
   await visit(root, '', 0);
-  return { files, truncated };
+  return { files, truncated, unreadable };
 }
