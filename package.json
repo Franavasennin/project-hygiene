@@ -1,0 +1,26 @@
+{
+  "name": "project-hygiene",
+  "version": "0.1.0",
+  "description": "Audits and organizes software projects and AI-assisted development environments.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "hygiene": "./dist/cli/index.js" },
+  "engines": { "node": ">=20" },
+  "files": ["dist", "rules"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "picomatch": "^4.0.2",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/picomatch": "^3.0.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
