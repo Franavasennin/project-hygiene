@@ -21,12 +21,12 @@ function classify(confidence: number): ProjectStatus {
   return 'not-project';
 }
 
-async function scoreDir(absDir: string): Promise<{ confidence: number; markers: string[] }> {
+async function scoreDir(absDir: string): Promise<{ confidence: number; markers: string[]; unreadable: boolean }> {
   let names: string[];
   try {
     names = await readdir(absDir);
   } catch {
-    return { confidence: 0, markers: [] };
+    return { confidence: 0, markers: [], unreadable: true };
   }
   const set = new Set(names);
   const markers: string[] = [];
@@ -47,7 +47,7 @@ async function scoreDir(absDir: string): Promise<{ confidence: number; markers: 
     markers.push('README');
   }
 
-  return { confidence: Math.min(1, confidence), markers };
+  return { confidence: Math.min(1, confidence), markers, unreadable: false };
 }
 
 /**
@@ -61,8 +61,13 @@ export async function detectProjects(root: string): Promise<ProjectCandidate[]> 
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith('.')) continue;
     const abs = path.join(root, e.name);
-    const { confidence, markers } = await scoreDir(abs);
-    out.push({ path: e.name, confidence, markers, status: classify(confidence) });
+    const { confidence, markers, unreadable } = await scoreDir(abs);
+    out.push({
+      path: e.name,
+      confidence,
+      markers,
+      status: unreadable ? 'unknown-boundary' : classify(confidence),
+    });
   }
 
   const self = await scoreDir(root);
@@ -70,7 +75,13 @@ export async function detectProjects(root: string): Promise<ProjectCandidate[]> 
     path: '.',
     confidence: self.confidence,
     markers: self.markers,
-    status: classify(self.confidence),
+    status: self.unreadable ? 'unknown-boundary' : classify(self.confidence),
+  });
+
+  out.sort((a, b) => {
+    if (a.path === '.') return -1;
+    if (b.path === '.') return 1;
+    return a.path.localeCompare(b.path);
   });
 
   return out;

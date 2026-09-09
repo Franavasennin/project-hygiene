@@ -44,4 +44,37 @@ describe('detectProjects', () => {
     const found = await detectProjects(root);
     expect(found.find((p) => p.path === 'hijo')?.status).toBe('project');
   });
+
+  it('un directorio vacio es not-project', async () => {
+    await mkdir(path.join(root, 'vacio'));
+    const v = (await detectProjects(root)).find((p) => p.path === 'vacio');
+    expect(v?.status).toBe('not-project');
+    expect(v?.confidence).toBe(0);
+  });
+
+  it('el marker refleja las senales encontradas', async () => {
+    await mkdir(path.join(root, 'd', '.git'), { recursive: true });
+    const d = (await detectProjects(root)).find((p) => p.path === 'd');
+    expect(d?.markers).toContain('.git');
+  });
+
+  it('la confianza nunca supera 1', async () => {
+    await touch('e/package.json');
+    await mkdir(path.join(root, 'e', '.git'), { recursive: true });
+    await mkdir(path.join(root, 'e', 'src'), { recursive: true });
+    await mkdir(path.join(root, 'e', 'tests'), { recursive: true });
+    await touch('e/README.md');
+    const e = (await detectProjects(root)).find((p) => p.path === 'e');
+    expect(e?.confidence).toBeLessThanOrEqual(1);
+  });
+
+  it('el resultado esta ordenado por path con la raiz primero', async () => {
+    await mkdir(path.join(root, 'zeta'));
+    await mkdir(path.join(root, 'alfa'));
+    const found = await detectProjects(root);
+    const paths = found.map((p) => p.path);
+    expect(paths[0]).toBe('.');
+    const sinRaiz = paths.slice(1);
+    expect(sinRaiz).toEqual([...sinRaiz].sort());
+  });
 });
