@@ -51,6 +51,18 @@ function basename(p: string): string {
   return i === -1 ? p : p.slice(i + 1);
 }
 
+/**
+ * Evalua un unico predicado con nombre contra el contexto de un fichero.
+ *
+ * Contrato de confianza: `value` llega aqui ya validado por el JSON Schema
+ * de rules/pack.schema.json (ver src/rules/schema.ts). El schema garantiza
+ * el tipo de cada predicado -- boolean para is_file/is_dir/tracked_by_git/etc,
+ * enum para git_status, integer para depth_gt/size_gt/size_lt, un patron
+ * `\d+[dhm]` para older_than/newer_than. Este modulo asume esa garantia y
+ * no revalida tipos: hacerlo duplicaria una comprobacion que ya ocurre en
+ * la capa de carga de packs. Si algun dia `evalPredicate` se expone a
+ * entrada que NO paso por ese schema, esta asuncion deja de sostenerse.
+ */
 export async function evalPredicate(
   name: string,
   value: unknown,
