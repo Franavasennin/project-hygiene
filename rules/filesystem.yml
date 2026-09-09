@@ -1,0 +1,92 @@
+schema_version: 1
+pack_id: hygiene.filesystem.core
+version: 1.0.0
+axis: filesystem
+rules:
+  - id: FS-TEMP-001
+    title: Fichero de log abandonado
+    why: Un log es un artefacto generado. Fuera de una carpeta ignorada suele ser residuo.
+    severity: low
+    risk: safe
+    confidence: 0.9
+    match:
+      all:
+        - glob: "**/*.log"
+        - is_file: true
+        - older_than: 30d
+    evidence: [size, mtime]
+    suggests:
+      - type: quarantine
+      - type: review
+
+  - id: FS-TEMP-002
+    title: Archivo comprimido abandonado
+    why: Un zip o un tar sin referencia suele ser una descarga olvidada, no una dependencia.
+    severity: low
+    risk: medium
+    confidence: 0.6
+    match:
+      all:
+        - any:
+            - glob: "**/*.zip"
+            - glob: "**/*.tar.gz"
+            - glob: "**/*.rar"
+        - is_file: true
+        - older_than: 90d
+    evidence: [size, mtime]
+    suggests:
+      - type: review
+
+  - id: FS-NAMING-001
+    title: Fichero versionado a mano por el nombre
+    why: >
+      Un sufijo como final, v2, copy, backup u old indica una copia manual que
+      sustituye al control de versiones. No implica que el fichero sea prescindible.
+    severity: medium
+    risk: medium
+    confidence: 0.7
+    match:
+      all:
+        - basename_regex: '(?i)[-_ ](final|v[0-9]+|copy|backup|old|prueba|temp)[0-9]*(\.[^.]+)?$'
+        - is_file: true
+    evidence: [size, mtime]
+    suggests:
+      - type: review
+
+  - id: FS-DUP-001
+    title: Fichero duplicado por contenido
+    why: Dos ficheros con el mismo hash duplican mantenimiento y confunden al lector.
+    severity: low
+    risk: medium
+    confidence: 0.8
+    match:
+      all:
+        - is_file: true
+        - sha256_duplicate: true
+    evidence: [size]
+    suggests:
+      - type: review
+
+  - id: FS-DEPTH-001
+    title: Anidamiento excesivo
+    why: Mas de ocho niveles suele indicar estructura accidental, no diseno.
+    severity: info
+    risk: safe
+    confidence: 0.5
+    match:
+      all:
+        - depth_gt: 8
+        - is_file: true
+    suggests:
+      - type: review
+
+  - id: FS-SYMLINK-001
+    title: Enlace simbolico
+    why: Un enlace puede apuntar fuera del proyecto y romper la reproducibilidad.
+    severity: low
+    risk: unknown
+    confidence: 0.6
+    match:
+      is_symlink: true
+    suggests:
+      - type: review

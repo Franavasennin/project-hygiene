@@ -1,0 +1,50 @@
+schema_version: 1
+pack_id: hygiene.git.core
+version: 1.0.0
+axis: git
+rules:
+  - id: GIT-IGNORE-002
+    title: Artefacto generado versionado
+    why: Versionar dependencias o builds infla el repositorio y provoca conflictos.
+    severity: high
+    risk: medium
+    confidence: 0.9
+    match:
+      all:
+        - any:
+            - glob: "**/node_modules/**"
+            - glob: "**/dist/**"
+            - glob: "**/build/**"
+            - glob: "**/coverage/**"
+        - tracked_by_git: true
+    suggests:
+      - type: ignore
+      - type: review
+
+  - id: GIT-DIRTY-001
+    title: Cambio sin commitear con antiguedad
+    why: Un cambio sin commitear durante semanas se pierde o se pisa.
+    severity: low
+    risk: high
+    confidence: 0.7
+    match:
+      all:
+        - git_status: dirty
+        - is_file: true
+        - older_than: 14d
+    suggests:
+      - type: review
+
+  - id: GIT-LARGE-001
+    title: Fichero grande versionado
+    why: Un binario grande en el arbol hace lento cada clon del repositorio.
+    severity: medium
+    risk: medium
+    confidence: 0.8
+    match:
+      all:
+        - tracked_by_git: true
+        - size_gt: 10485760
+    evidence: [size]
+    suggests:
+      - type: review

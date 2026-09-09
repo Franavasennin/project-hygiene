@@ -1,0 +1,54 @@
+schema_version: 1
+pack_id: hygiene.ai.core
+version: 1.0.0
+axis: ai
+rules:
+  - id: AI-SCRATCH-001
+    title: Fichero de trabajo de agente fuera de .tmp
+    why: >
+      Planes, borradores y notas de agente pertenecen a .tmp o al historial de la
+      conversacion, no a la raiz del proyecto.
+    severity: medium
+    risk: low
+    confidence: 0.7
+    match:
+      all:
+        - basename_regex: '(?i)^(plan|scratch|notes|todo|analysis|resumen|informe)[-_ ]?[0-9]*\.(md|txt|json)$'
+        - none:
+            - glob: ".tmp/**"
+            - glob: "docs/**"
+        - is_file: true
+    suggests:
+      - type: review
+
+  - id: AI-SCRIPT-001
+    title: Script de un solo uso en la raiz
+    why: Un script suelto en la raiz sin carpeta scripts suele ser residuo de una sesion.
+    severity: medium
+    risk: medium
+    confidence: 0.6
+    match:
+      all:
+        - path_regex: '^[^/]+\.(sh|mjs|cjs|py)$'
+        - none:
+            - basename_regex: '^(setup|install|build|release)\.'
+        - is_file: true
+    suggests:
+      - type: review
+
+  - id: AI-STATE-001
+    title: Estado o cache de agente sin ignorar
+    why: El estado de un agente es efimero y no debe versionarse ni acumularse.
+    severity: low
+    risk: safe
+    confidence: 0.8
+    match:
+      all:
+        - any:
+            - glob: "**/.claude/state/**"
+            - glob: "**/.agent-cache/**"
+            - glob: "**/.aider*"
+        - ignored_by_git: false
+    suggests:
+      - type: ignore
+      - type: review
