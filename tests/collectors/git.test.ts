@@ -33,4 +33,21 @@ describe('collectGit', () => {
     expect(facts.dirtyFiles.has('a.txt')).toBe(true);
     expect(facts.currentBranch).toBe('main');
   });
+
+  it('un renombrado reporta la ruta nueva en dirtyFiles', async () => {
+    await run('git', ['init', '-b', 'main'], { cwd: root });
+    await run('git', ['config', 'user.email', 't@t.t'], { cwd: root });
+    await run('git', ['config', 'user.name', 'T'], { cwd: root });
+    await writeFile(
+      path.join(root, 'viejo.txt'),
+      'contenido largo suficiente para que git detecte similitud\n'.repeat(5),
+    );
+    await run('git', ['add', 'viejo.txt'], { cwd: root });
+    await run('git', ['commit', '-m', 'x'], { cwd: root });
+    await run('git', ['mv', 'viejo.txt', 'nuevo.txt'], { cwd: root });
+
+    const facts = await collectGit(root);
+    expect(facts.dirtyFiles.has('nuevo.txt')).toBe(true);
+    expect(facts.dirtyFiles.has('viejo.txt')).toBe(false);
+  });
 });

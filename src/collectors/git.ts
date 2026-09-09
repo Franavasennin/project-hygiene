@@ -19,7 +19,11 @@ function empty(): GitFacts {
 
 async function git(cwd: string, args: string[]): Promise<string | null> {
   try {
-    const { stdout } = await run('git', args, { cwd, maxBuffer: 32 * 1024 * 1024 });
+    const { stdout } = await run('git', ['--no-optional-locks', ...args], {
+      cwd,
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 10_000,
+    });
     return stdout;
   } catch {
     return null;
@@ -28,6 +32,11 @@ async function git(cwd: string, args: string[]): Promise<string | null> {
 
 const lines = (s: string | null): string[] =>
   s ? s.split('\n').map((l) => l.trim()).filter(Boolean) : [];
+
+/** Parsea salida NUL-separada de git (opcion -z). Devuelve las rutas no vacias. */
+function splitNul(s: string | null): string[] {
+  return s ? s.split('\0').filter(Boolean) : [];
+}
 
 /**
  * Resuelve la rama por defecto en el orden acordado: origin/HEAD, luego main,
@@ -51,13 +60,30 @@ export async function collectGit(cwd: string): Promise<GitFacts> {
   const rootOut = await git(cwd, ['rev-parse', '--show-toplevel']);
   if (!rootOut) return empty();
 
-  const tracked = new Set(lines(await git(cwd, ['ls-files'])));
+  const tracked = new Set(splitNul(await git(cwd, ['ls-files', '-z'])));
   const ignored = new Set(
-    lines(await git(cwd, ['ls-files', '--others', '--ignored', '--exclude-standard'])),
+    splitNul(
+      await git(cwd, ['ls-files', '--others', '--ignored', '--exclude-standard', '-z']),
+    ),
   );
 
-  const status = lines(await git(cwd, ['status', '--porcelain']));
-  const dirty = new Set(status.map((l) => l.slice(2).trim()).filter(Boolean));
+  const statusRaw = splitNul(await git(cwd, ['status', '--porcelain', '-z']));
+  const dirty = new Set<string>();
+  for (let i = 0; i < statusRaw.length; i++) {
+    const entry = statusRaw[i];
+    if (!entry) continue;
+    const code = entry.slice(0, 2);
+    const rest = entry.slice(3);
+    const isRenameOrCopy = code[0] === 'R' || code[0] === 'C';
+    if (isRenameOrCopy) {
+      // La entrada NUL siguiente es la ruta ORIGEN; `rest` en la entrada actual
+      // es la ruta DESTINO (nueva) bajo -z.
+      dirty.add(rest);
+      i++; // consume la entrada del origen sin usarla, no aporta al set de dirty
+    } else if (rest) {
+      dirty.add(rest);
+    }
+  }
 
   const branch = (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']))?.trim() ?? null;
   const stashes = lines(await git(cwd, ['stash', 'list'])).length;
