@@ -57,10 +57,20 @@ async function findReferences(files: FileEntry[], budget: Budget): Promise<Set<s
   return referenced;
 }
 
-async function duplicateHashes(files: FileEntry[], content: ContentCache): Promise<Set<string>> {
+// Reutiliza maxReferenceSearchFiles como tope tambien para el escaneo de
+// duplicados, en vez de anadir un limite dedicado a la interfaz Limits.
+// Ambas operaciones son de la misma naturaleza (recorrer y leer contenido
+// de una porcion acotada del arbol), asi que comparten presupuesto.
+async function duplicateHashes(files: FileEntry[], content: ContentCache, budget: Budget): Promise<Set<string>> {
   const counts = new Map<string, number>();
+  let scanned = 0;
   for (const f of files) {
     if (f.isDir) continue;
+    if (scanned >= budget.limits.maxReferenceSearchFiles) {
+      budget.note('maxReferenceSearchFiles');
+      break;
+    }
+    scanned += 1;
     const h = await content.hash(f);
     if (!h) continue;
     counts.set(h, (counts.get(h) ?? 0) + 1);
@@ -94,14 +104,29 @@ export async function runAudit(options: AuditOptions): Promise<AuditResult> {
   };
 
   const content = createContentCache(budget);
-  const duplicates = await duplicateHashes(files, content);
+  const duplicates = await duplicateHashes(files, content, budget);
   const referenced = await findReferences(files, budget);
   const byPath = new Map(files.map((f) => [f.path, f]));
   const now = Date.now();
 
+  // Si la ruta pedida no esta en el inventario recorrido (byPath), se degrada
+  // con un FileEntry sintetico minimo en vez de lanzar una excepcion que
+  // abortaria toda la auditoria. Esto es defensivo: hoy evaluateAll solo pide
+  // rutas que vienen de inventory.files (por lo que este caso no deberia
+  // ocurrir en el flujo actual), pero es la funcion publica mas importante
+  // del sistema y no debe ser fragil ante un futuro cambio en quien llama a
+  // makeContext.
   const makeContext = (p: string): EvalContext => {
-    const entry = byPath.get(p);
-    if (!entry) throw new Error(`entrada desconocida: ${p}`);
+    const entry = byPath.get(p) ?? {
+      path: p,
+      absPath: path.join(options.root, p),
+      isDir: false,
+      isSymlink: false,
+      size: 0,
+      mtimeMs: 0,
+      depth: p.split('/').length,
+      notDescended: false,
+    };
     return {
       entry,
       git: git.isRepo ? git : null,
