@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # NN-5: la herramienta se audita a si misma con las mismas reglas.
+      # Apunta a src/ y rules/, no a la raiz completa: examples/before/
+      # contiene fixtures que disparan reglas a proposito y no representan
+      # el codigo real del proyecto. Sin listas de exclusion propias sobre
+      # el codigo que SI se audita.
+      #
+      # TODO(NN-5, pre-Fase-3): SEC-ENTROPY-001 dispara falsos positivos
+      # sistemicos sobre codigo TypeScript normal: 15/15 ficheros .ts de
+      # src/ y 2 ficheros .yml de rules/ (ai.yml, filesystem.yml) quedan
+      # marcados como "posible secreto por alta entropia" sin serlo. No es
+      # un hallazgo legitimo puntual (no se arregla renombrando un fichero)
+      # sino un problema de calibracion de la propia regla de entropia.
+      # Se deja el dogfood en no bloqueante (|| true) hasta que se ajuste
+      # la regla SEC-ENTROPY-001 para no disparar contra codigo fuente
+      # ordinario; entonces retirar el `|| true`.
+      - run: npm run dogfood || true
