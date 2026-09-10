@@ -70,5 +70,7 @@ rules:
             - glob: "**/package-lock.json"
             - glob: "**/*.min.js"
             - glob: "**/*.map"
+            - glob: "rules/*.yml"
+            - content_matches: '^schema_version:\s*\d+\r?\npack_id:\s*hygiene\.'
     suggests:
       - type: review
