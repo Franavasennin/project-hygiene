@@ -4,6 +4,12 @@ Audits and organizes software projects and AI-assisted development environments.
 
 Turn AI-assisted vibe coding into maintainable software engineering.
 
+> **Hoy, project-hygiene solo diagnostica: no borra ni modifica nada.**
+> `scan`, `audit` y `explain` son de solo lectura por contrato (hay un test
+> que falla si alguna vez escriben en disco). La limpieza real (`clean`,
+> cuarentena reversible) llega en la segunda entrega -- ver la sección
+> "Estado" más abajo.
+
 ## Principios
 
 1. **Observe before modify.** Primero se entiende el entorno, después se toca.
@@ -12,14 +18,30 @@ Turn AI-assisted vibe coding into maintainable software engineering.
 4. **Policy is separate from execution.** Las reglas dicen qué está mal. El
    usuario aprueba. El ejecutor aplica.
 
+Ver la [especificación de diseño completa](docs/superpowers/specs/2026-09-09-project-hygiene-design.md)
+para el detalle de los cinco invariantes no negociables (NN-1 a NN-5) y el
+razonamiento detrás de cada decisión.
+
 ## Uso
+
+Mientras el paquete no esté publicado en npm, se usa localmente:
+
+```bash
+npm install
+npm run build
+node dist/cli/index.js scan .
+node dist/cli/index.js audit .
+node dist/cli/index.js audit . --json
+node dist/cli/index.js explain FS-NAMING-001
+```
+
+Una vez publicado en npm, el binario se llamará `hygiene` y podrá invocarse con:
 
 ```bash
 npx project-hygiene scan .
-npx project-hygiene audit .
-npx project-hygiene audit . --json
-npx project-hygiene explain FS-NAMING-001
 ```
+
+(el nombre del paquete es `project-hygiene`, pero el comando que instala es `hygiene`).
 
 `scan` imprime el inventario en bruto (sin juicio). `audit` ejecuta las reglas
 y produce hallazgos y puntuación. `explain <RULE-ID>` muestra por qué existe
@@ -34,10 +56,9 @@ Cuatro ejes: sistema de ficheros y límites de proyecto, higiene de Git, secreto
 y seguridad, y artefactos de agentes de IA. Las reglas viven en `rules/` como
 YAML legible. Añadir una no requiere tocar el motor.
 
-En esta versión la herramienta **no modifica nada**. `scan`, `audit` y `explain`
-son de solo lectura por contrato, y hay un test que falla si alguna vez escriben.
-
 ## Desarrollo
+
+Requiere Node 20 o superior (ver `engines` en `package.json`).
 
 ```bash
 npm install
@@ -64,7 +85,7 @@ Esta entrega (**núcleo de solo lectura**) incluye:
 - Los cuatro packs de reglas (`rules/filesystem.yml`, `rules/git.yml`,
   `rules/security.yml`, `rules/ai.yml`).
 - La CLI, con los comandos `scan`, `audit` y `explain`.
-- ~110 tests.
+- 110 tests.
 
 Lo que **no** incluye todavía, y por qué:
 
