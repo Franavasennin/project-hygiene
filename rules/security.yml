@@ -1,0 +1,77 @@
+schema_version: 1
+pack_id: hygiene.security.core
+version: 1.0.0
+axis: security
+rules:
+  - id: SEC-SECRET-001
+    title: Fichero de entorno versionado
+    why: Un fichero de entorno versionado expone credenciales a todo el que clone.
+    severity: critical
+    risk: high
+    confidence: 0.95
+    match:
+      all:
+        - any:
+            - glob: "**/.env"
+            - glob: "**/.env.*"
+        - none:
+            - glob: "**/.env.example"
+            - glob: "**/.env.sample"
+        - tracked_by_git: true
+    suggests:
+      - type: ignore
+      - type: review
+
+  - id: SEC-KEY-001
+    title: Clave privada en el arbol
+    why: Una clave privada nunca debe vivir en un repositorio, ni versionada ni suelta.
+    severity: critical
+    risk: high
+    confidence: 0.9
+    match:
+      any:
+        - basename_regex: '^id_(rsa|dsa|ecdsa|ed25519)$'
+        - content_matches: '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    suggests:
+      - type: review
+
+  - id: SEC-CERT-001
+    title: Certificado con clave publica
+    why: >
+      Un certificado publico puede ser legitimo y necesario. Se reporta para que
+      una persona lo confirme, no como incidencia.
+    severity: info
+    risk: low
+    confidence: 0.5
+    match:
+      all:
+        - any:
+            - glob: "**/*.crt"
+            - glob: "**/*.cer"
+        - is_file: true
+    suggests:
+      - type: review
+
+  - id: SEC-ENTROPY-001
+    title: Posible secreto por alta entropia
+    why: >
+      Una cadena de alta entropia puede ser un hash, un UUID o un token legitimo.
+      Se reporta como posible secreto, nunca como confirmado.
+    severity: medium
+    risk: unknown
+    confidence: 0.4
+    match:
+      all:
+        - tracked_by_git: true
+        - is_file: true
+        - entropy_gt: 4.5
+        - none:
+            - glob: "**/*.lock"
+            - glob: "**/package-lock.json"
+            - glob: "**/*.min.js"
+            - glob: "**/*.map"
+            - all:
+                - glob: "**/*.yml"
+                - content_matches: 'pack_id:\s*hygiene\.'
+    suggests:
+      - type: review

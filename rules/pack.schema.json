@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "project-hygiene rule pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack_id", "version", "axis", "rules"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "pack_id": { "type": "string", "pattern": "^[a-z0-9.-]+$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "axis": { "enum": ["filesystem", "git", "security", "ai"] },
+    "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/rule" } }
+  },
+  "definitions": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "why", "severity", "risk", "confidence", "match", "suggests"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(FS|GIT|SEC|AI)-[A-Z]+-\\d{3}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "why": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+        "risk": { "enum": ["safe", "low", "medium", "high", "unknown"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "deprecated": { "type": "boolean" },
+        "docs": { "type": "string" },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "match": { "$ref": "#/definitions/match" },
+        "suggests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "enum": ["quarantine", "ignore", "move", "create", "review", "none"] }
+            }
+          }
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/match" } },
+        "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/match" } },
+        "none": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/match" } },
+        "glob": { "type": "string" },
+        "path_regex": { "type": "string" },
+        "basename_regex": { "type": "string" },
+        "depth_gt": { "type": "integer" },
+        "is_file": { "type": "boolean" },
+        "is_dir": { "type": "boolean" },
+        "is_symlink": { "type": "boolean" },
+        "is_empty": { "type": "boolean" },
+        "size_gt": { "type": "integer" },
+        "size_lt": { "type": "integer" },
+        "older_than": { "type": "string", "pattern": "^\\d+[dhm]$" },
+        "newer_than": { "type": "string", "pattern": "^\\d+[dhm]$" },
+        "tracked_by_git": { "type": "boolean" },
+        "ignored_by_git": { "type": "boolean" },
+        "git_status": { "enum": ["clean", "dirty"] },
+        "content_matches": { "type": "string" },
+        "entropy_gt": { "type": "number" },
+        "sha256_duplicate": { "type": "boolean" },
+        "referenced_by_source": { "type": "boolean" }
+      }
+    }
+  }
+}

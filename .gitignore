@@ -28,4 +28,6 @@ Thumbs.db
 
 # Logs
 *.log
+# Excepcion: examples/before/debug.log es parte del fixture dorado y se
+# fuerza con `git add -f`. Si se regenera el fixture, recordar el -f.
 npm-debug.log*

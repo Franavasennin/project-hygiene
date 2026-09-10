@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # NN-5: la herramienta se audita a si misma con las mismas reglas.
+      # Apunta a src/ y rules/, no a la raiz completa: examples/before/
+      # contiene fixtures que disparan reglas a proposito y no representan
+      # el codigo real del proyecto. Sin listas de exclusion propias sobre
+      # el codigo que SI se audita.
+      - run: npm run dogfood
