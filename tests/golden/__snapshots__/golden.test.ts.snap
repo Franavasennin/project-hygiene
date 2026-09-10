@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`fixture dorado > detecta el conjunto esperado de reglas 1`] = `
+[
+  "FS-DUP-001",
+  "FS-NAMING-001",
+]
+`;
