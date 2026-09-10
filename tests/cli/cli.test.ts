@@ -45,4 +45,27 @@ describe('main', () => {
     await writeFile(path.join(root, 'id_rsa'), '-----BEGIN RSA PRIVATE KEY-----');
     expect(await main(['audit', root], print)).toBe(1);
   });
+
+  it('--help sin comando devuelve 0 y muestra el uso', async () => {
+    const code = await main(['--help'], print);
+    expect(code).toBe(0);
+    expect(salida.join('\n')).toContain('Comandos:');
+  });
+
+  it('un comando invalido con --help muestra el uso y devuelve 0 (--help tiene prioridad)', async () => {
+    const code = await main(['inventado', '--help'], print);
+    expect(code).toBe(0);
+  });
+
+  it('audit sobre una ruta que no existe devuelve 2', async () => {
+    const code = await main(['audit', path.join(root, 'no-existe')], print);
+    expect(code).toBe(2);
+  });
+
+  it('audit sobre una ruta que es un fichero devuelve 2', async () => {
+    const ficheroComoRoot = path.join(root, 'no-es-directorio.txt');
+    await writeFile(ficheroComoRoot, 'x');
+    const code = await main(['audit', ficheroComoRoot], print);
+    expect(code).toBe(2);
+  });
 });

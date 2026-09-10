@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
@@ -44,9 +45,14 @@ export async function main(argv: string[], print: Printer = console.log): Promis
   const [command, target] = parsed.positionals;
   const json = parsed.values.json === true;
 
-  if (parsed.values.help === true || !command) {
+  if (parsed.values.help === true) {
     print(USAGE);
-    return command ? 0 : 2;
+    return 0;
+  }
+
+  if (!command) {
+    print(USAGE);
+    return 2;
   }
 
   try {
@@ -76,6 +82,19 @@ export async function main(argv: string[], print: Printer = console.log): Promis
 
     if (command === 'scan' || command === 'audit') {
       const root = path.resolve(target ?? process.cwd());
+
+      let rootStat;
+      try {
+        rootStat = await stat(root);
+      } catch {
+        print(`La ruta no existe: ${root}`);
+        return 2;
+      }
+      if (!rootStat.isDirectory()) {
+        print(`La ruta no es un directorio: ${root}`);
+        return 2;
+      }
+
       const result = await runAudit({ root, rulesDir: RULES_DIR });
 
       if (command === 'scan') {
@@ -101,5 +120,11 @@ const invocadoDirectamente = process.argv[1]
   && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (invocadoDirectamente) {
-  main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
+  main(process.argv.slice(2)).then(
+    (code) => { process.exitCode = code; },
+    (err) => {
+      console.error(`Error inesperado: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 2;
+    },
+  );
 }
