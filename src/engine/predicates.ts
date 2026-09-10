@@ -110,10 +110,9 @@ export async function evalPredicate(
     case 'entropy_gt': {
       const text = await ctx.content.text(e);
       if (text === null) return false;
-      const best = text
-        .split(/[\s"'`,;]+/)
-        .filter((t) => t.length >= 16)
-        .reduce((max, t) => Math.max(max, shannonEntropy(t)), shannonEntropy(text));
+      const tokens = text.split(/[\s"'`,;]+/).filter((t) => t.length >= 16);
+      if (tokens.length === 0) return false;
+      const best = tokens.reduce((max, t) => Math.max(max, shannonEntropy(t)), 0);
       return best > Number(value);
     }
     case 'sha256_duplicate': {

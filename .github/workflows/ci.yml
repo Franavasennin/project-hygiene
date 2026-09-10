@@ -28,13 +28,23 @@ jobs:
       # el codigo real del proyecto. Sin listas de exclusion propias sobre
       # el codigo que SI se audita.
       #
-      # TODO(NN-5, pre-Fase-3): SEC-ENTROPY-001 dispara falsos positivos
-      # sistemicos sobre codigo TypeScript normal: 15/15 ficheros .ts de
-      # src/ y 2 ficheros .yml de rules/ (ai.yml, filesystem.yml) quedan
-      # marcados como "posible secreto por alta entropia" sin serlo. No es
-      # un hallazgo legitimo puntual (no se arregla renombrando un fichero)
-      # sino un problema de calibracion de la propia regla de entropia.
-      # Se deja el dogfood en no bloqueante (|| true) hasta que se ajuste
-      # la regla SEC-ENTROPY-001 para no disparar contra codigo fuente
-      # ordinario; entonces retirar el `|| true`.
+      # TODO(NN-5, pre-Fase-3): el bug de calibracion original de
+      # entropy_gt (usaba la entropia de Shannon del FICHERO COMPLETO como
+      # semilla del reduce, disparando sobre casi cualquier codigo fuente
+      # no trivial) esta arreglado: `audit src` da 100/100 y "Sin
+      # hallazgos". `audit rules` aun deja un (1) hallazgo residual de
+      # SEC-ENTROPY-001 sobre rules/filesystem.yml -- no por el bug de
+      # entropia agregada, sino porque el patron regex de FS-NAMING-001
+      # ('(?i)[-_ ](final|copy|backup|old|prueba|temp)[0-9]*(\.[^.]+)?$')
+      # es, sin espacios, un unico token de alta entropia local (4.80
+      # bits/caracter, por encima del umbral 4.5) -- limitacion inherente
+      # de cualquier heuristica de entropia por token frente a regex
+      # complejos, no un defecto puntual arreglable renombrando algo. La
+      # propia regla tiene confidence 0.4 y su "why" dice explicitamente
+      # que se reporta "como posible secreto, nunca como confirmado", asi
+      # que este es el comportamiento por diseno, no un falso positivo
+      # sistemico. Se mantiene el dogfood en no bloqueante (|| true) hasta
+      # decidir si este caso puntual justifica una excepcion explicita en
+      # rules/security.yml (p.ej. excluir rules/**/*.yml) o si se acepta
+      # como hallazgo de revision manual perpetuo.
       - run: npm run dogfood || true

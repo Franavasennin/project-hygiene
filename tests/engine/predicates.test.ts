@@ -141,4 +141,22 @@ describe('evalPredicate', () => {
     expect(await evalPredicate('referenced_by_source', true, referenciado)).toBe(true);
     expect(await evalPredicate('referenced_by_source', true, ctx())).toBe(false);
   });
+
+  it('entropy_gt no dispara por la entropia agregada de codigo TypeScript ordinario, solo por tokens individuales largos', async () => {
+    const codigoOrdinario = `
+      export function calcularTotal(items, config) {
+        let sumaTotal = 0;
+        let contadorItems = 0;
+        for (const itemActual of items) {
+          const valorItem = itemActual.valor * itemActual.cantidad;
+          sumaTotal = sumaTotal + valorItem;
+          contadorItems = contadorItems + 1;
+        }
+        const promedioFinal = contadorItems > 0 ? sumaTotal / contadorItems : 0;
+        return { sumaTotal: sumaTotal, contadorItems: contadorItems, promedioFinal: promedioFinal };
+      }
+    `;
+    const contextoCodigo = ctx({ content: { text: async () => codigoOrdinario, hash: async () => null } });
+    expect(await evalPredicate('entropy_gt', 4.5, contextoCodigo)).toBe(false);
+  });
 });
