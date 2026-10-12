@@ -72,6 +72,9 @@ describe('packs de la v1', () => {
       'rules:',
       '  - id: FS-NAMING-001',
       "    match: { basename_regex: '(?i)[-_ ](final|v[0-9]+|copy|backup|old|prueba|temp)[0-9]*(\\\\.[^.]+)?$' }",
+      // Token de alta entropia real: la regex de arriba ya no dispara por si
+      // sola desde que entropy_gt parte por caracteres ajenos a un secreto.
+      '    docs: Zq8xR2mW9vK4pL7nB3tY6cJ1hF5dG0sA',
     ].join('\n');
 
     const path1 = 'rules/mi-pack.yml';

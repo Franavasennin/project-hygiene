@@ -4,11 +4,11 @@ Audits and organizes software projects and AI-assisted development environments.
 
 Turn AI-assisted vibe coding into maintainable software engineering.
 
-> **Hoy, project-hygiene solo diagnostica: no borra ni modifica nada.**
-> `scan`, `audit` y `explain` son de solo lectura por contrato (hay un test
-> que falla si alguna vez escriben en disco). La limpieza real (`clean`,
-> cuarentena reversible) llega en la segunda entrega -- ver la sección
-> "Estado" más abajo.
+> **project-hygiene nunca modifica nada sin una aprobación explícita por
+> operación.** `scan`, `audit`, `plan` y `explain` son de solo lectura por
+> contrato (hay un test que falla si alguna vez escriben en disco). `clean`
+> solo mueve a una cuarentena fuera del workspace lo que se aprobó antes con
+> `approve`, y `restore` lo devuelve verificando el hash.
 
 ## Principios
 
@@ -50,6 +50,32 @@ una regla concreta. `--json` da salida legible por máquina en `audit` y
 
 Códigos de salida: `0` limpio, `1` hallazgos, `2` fallo de la herramienta.
 
+### Limpiar con aprobación
+
+```bash
+node dist/cli/index.js plan .
+node dist/cli/index.js approve OP-000001 OP-000002 --root .
+node dist/cli/index.js approve --risk safe --root .
+node dist/cli/index.js clean --approved --root .
+node dist/cli/index.js restore OP-000001
+```
+
+`plan` muestra las operaciones propuestas, cada una con su ID, y no toca nada.
+`approve` registra aprobaciones en `~/.hygiene/approvals/`. `--risk safe` es un
+atajo que se guarda como la lista concreta de IDs a la que se expande. `clean
+--approved` recalcula el plan: si una sola operación aprobada ya no coincide con
+el disco, no mueve nada. Si todas coinciden, las mueve a
+`~/.hygiene/quarantine/` con un manifiesto por operación. `restore` devuelve el
+fichero a su ruta, se niega si el hash no coincide o si la ruta ya está ocupada,
+y restaura permisos según la plataforma. Donde no puede, lo dice (`unsupported`)
+en lugar de fingir que lo hizo.
+
+La base `~/.hygiene` se cambia con la variable `HYGIENE_HOME`. Nunca puede caer
+dentro del workspace auditado.
+
+En esta versión solo se ejecutan operaciones `quarantine`, y solo sobre ficheros
+regulares que nada referencia. Todo lo demás se propone como `review`.
+
 ## Qué audita hoy
 
 Cuatro ejes: sistema de ficheros y límites de proyecto, higiene de Git, secretos
@@ -74,27 +100,31 @@ audita bien a sí misma.
 
 ## Estado
 
-Esta es la primera de tres entregas planeadas para project-hygiene.
+Segunda de tres entregas planeadas.
 
-Esta entrega (**núcleo de solo lectura**) incluye:
+**Primera entrega (núcleo de solo lectura):** detección de proyectos, los tres
+collectors, motor de reglas con límites de ejecución, scorer, los cuatro packs
+de reglas y los comandos `scan`, `audit` y `explain`.
 
-- Detección de proyectos.
-- Los tres collectors (sistema de ficheros, contenido, git).
-- El motor de reglas, con límites de ejecución explícitos.
-- El scorer.
-- Los cuatro packs de reglas (`rules/filesystem.yml`, `rules/git.yml`,
-  `rules/security.yml`, `rules/ai.yml`).
-- La CLI, con los comandos `scan`, `audit` y `explain`.
-- 110 tests.
+**Segunda entrega (cuarentena reversible):** planner, aprobación por operación,
+executor, cuarentena fuera del workspace con manifiesto, `restore` con
+verificación de hash y permisos por plataforma, y los comandos `plan`,
+`approve`, `clean --approved` y `restore`.
 
-Lo que **no** incluye todavía, y por qué:
+- La búsqueda de referencias también cuenta como incompleta si un directorio no
+  se puede leer o un fichero fuente es un enlace simbólico; ambos casos bloquean
+  la cuarentena.
+- `entropy_gt` parte los tokens en los caracteres fuera del alfabeto
+  base64/hex, lo que elimina falsos positivos en expresiones de código densas.
 
-- **No hay `clean`/`quarantine`/`restore`.** Eso es el planner + executor +
-  cuarentena, que corresponde a la segunda entrega.
-- **No hay `init`/`loop` ni plantillas para nuevos proyectos.** Eso queda para
-  la tercera entrega.
-- **El predicado `in_git_history` no está implementado.** Detectar secretos en
-  el histórico de git (no solo en el árbol actual) queda diferido.
+Lo que **no** incluye todavía:
+
+- **`init`, `loop` y plantillas para nuevos proyectos.** Tercera entrega.
+- **Ejecución de `ignore`, `move` y `create`.** Se proponen pero no se aprueban
+  hasta que llegue `init`.
+- **Reglas de nivel proyecto y workspace** (`FS-ROOT-001`, `GIT-NOREPO-001`,
+  `AI-DOC-001` y otras). Necesitan un evaluador de ámbito de proyecto.
+- **El predicado `in_git_history`** y con él `SEC-HIST-001`.
 
 ## Reglas disponibles
 

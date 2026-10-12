@@ -79,3 +79,39 @@ export interface AuditResult {
   limits: LimitHit[];
   score: Score;
 }
+
+export type OperationType = SuggestionType;
+
+export type DegradeReason =
+  | 'unknown-risk'
+  | 'unknown-project-boundary'
+  | 'low-confidence'
+  | 'not-a-regular-file'
+  | 'referenced-by-source'
+  | 'references-undetermined'
+  | 'hash-unavailable'
+  | 'conflicting-suggestions';
+
+export interface Operation {
+  /** Estable dentro del plan: mismo estado de disco, mismo ID. */
+  id: string;
+  type: OperationType;
+  path: string;
+  findingIds: string[];
+  ruleIds: string[];
+  risk: Risk;
+  reason: string;
+  degradedFrom: OperationType | null;
+  degradeReason: DegradeReason | null;
+  /** Huella del origen al planificar; el executor la revalida antes de mover. */
+  source: { sha256: string | null; size: number };
+}
+
+export interface Plan {
+  planId: string;
+  root: string;
+  createdAt: string;
+  engineVersion: string;
+  minConfidence: number;
+  operations: Operation[];
+}

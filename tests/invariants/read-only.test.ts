@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -8,12 +8,14 @@ const { ESCRITURAS_ASYNC, ESCRITURAS_SYNC } = vi.hoisted(() => ({
     'writeFile', 'appendFile', 'mkdir', 'rm', 'rmdir', 'unlink',
     'rename', 'copyFile', 'chmod', 'truncate', 'symlink',
     'open', 'write', 'ftruncate', 'cp', 'link', 'mkdtemp',
+    'utimes', 'lutimes', 'chown', 'lchown',
   ] as const,
   ESCRITURAS_SYNC: [
     'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rmdirSync',
     'unlinkSync', 'renameSync', 'copyFileSync', 'chmodSync', 'truncateSync',
     'writeSync', 'ftruncateSync', 'cpSync', 'linkSync', 'mkdtempSync',
     'createWriteStream',
+    'utimesSync', 'lutimesSync', 'chownSync', 'lchownSync',
   ] as const,
 }));
 
@@ -82,6 +84,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 const { runAudit } = await import('../../src/audit.js');
+const { runPlan } = await import('../../src/plan.js');
 
 let root: string;
 beforeEach(async () => {
@@ -123,6 +126,29 @@ describe('NN-4: audit es read-only', () => {
       .map(([name]) => name);
 
     expect(usados, 'audit escribio en disco').toHaveLength(0);
+  });
+});
+
+describe('NN-4: plan es read-only', () => {
+  it('no invoca ninguna operacion de escritura aunque proponga cuarentenas', async () => {
+    const log = path.join(root, 'debug.log');
+    await writeFile(log, 'x');
+    const viejo = new Date(Date.now() - 60 * 24 * 3600 * 1000);
+    await utimes(log, viejo, viejo);
+
+    // Limpieza tras el setup, igual que en el test de audit (guia (b) al pie).
+    for (const fn of Object.values(asyncSpies)) fn.mockClear();
+    for (const fn of Object.values(syncSpies)) fn.mockClear();
+
+    // Asercion positiva: el plan tiene que haber propuesto algo ejecutable,
+    // si no, "no escribio" no probaria nada.
+    const { plan } = await runPlan({ root, rulesDir: path.join(process.cwd(), 'rules') });
+    expect(plan.operations.some((o) => o.type === 'quarantine')).toBe(true);
+
+    const usados = [...Object.entries(asyncSpies), ...Object.entries(syncSpies)]
+      .filter(([, fn]) => fn.mock.calls.length > 0)
+      .map(([name]) => name);
+    expect(usados, 'plan escribio en disco').toHaveLength(0);
   });
 });
 

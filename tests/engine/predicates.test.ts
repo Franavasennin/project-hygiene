@@ -159,4 +159,14 @@ describe('evalPredicate', () => {
     const contextoCodigo = ctx({ content: { text: async () => codigoOrdinario, hash: async () => null } });
     expect(await evalPredicate('entropy_gt', 4.5, contextoCodigo)).toBe(false);
   });
+
+  it('entropy_gt no trata una expresion de codigo pegada como un token, pero si detecta el secreto que contiene', async () => {
+    // Caso real del dogfood: 4.62 bits si se toma la expresion entera.
+    const expresion = 'if (APPROVABLE_RISKS.indexOf(op.risk) <= limit) chosen.set(op.id, op);';
+    const soloCodigo = ctx({ content: { text: async () => expresion, hash: async () => null } });
+    expect(await evalPredicate('entropy_gt', 4.5, soloCodigo)).toBe(false);
+
+    const conSecreto = ctx({ content: { text: async () => 'cfg.set(key,"Zq8xR2mW9vK4pL7nB3tY6cJ1hF5dG0sA")', hash: async () => null } });
+    expect(await evalPredicate('entropy_gt', 4.5, conSecreto)).toBe(true);
+  });
 });
