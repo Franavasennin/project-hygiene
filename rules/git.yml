@@ -48,3 +48,80 @@ rules:
     evidence: [size]
     suggests:
       - type: review
+
+  - id: GIT-NOREPO-001
+    title: Proyecto con codigo y sin repositorio
+    why: Un proyecto con manifiesto y sin control de versiones pierde su historia en cuanto se rompe algo.
+    severity: medium
+    risk: low
+    confidence: 0.8
+    scope: project
+    match:
+      all:
+        - has_child: [package.json, pyproject.toml, Cargo.toml, go.mod, pom.xml, composer.json]
+        - in_git_repo: false
+    suggests:
+      - type: review
+
+  - id: GIT-IGNORE-001
+    title: Repositorio sin .gitignore
+    why: Sin .gitignore, el primer git add -A versiona dependencias, builds y secretos.
+    severity: low
+    risk: safe
+    confidence: 0.9
+    scope: project
+    match:
+      all:
+        - is_git_repo: true
+        - none:
+            - has_child: [.gitignore]
+    suggests:
+      - type: create
+      - type: review
+
+  - id: GIT-WORKTREE-001
+    title: Worktree sin repositorio padre
+    why: >
+      Un .git que apunta a un gitdir que ya no existe deja el directorio fuera
+      de control de versiones aunque parezca un repositorio.
+    severity: medium
+    risk: unknown
+    confidence: 0.9
+    scope: project
+    match:
+      git_worktree_orphan: true
+    suggests:
+      - type: review
+
+  - id: GIT-STASH-001
+    title: Stash antiguo
+    why: Un stash olvidado durante semanas es trabajo que nadie recuerda tener.
+    severity: low
+    risk: high
+    confidence: 0.8
+    scope: project
+    match:
+      all:
+        - is_git_repo: true
+        - git_stash_older_than: 30d
+    suggests:
+      - type: review
+
+  - id: GIT-BRANCH-001
+    title: Rama inactiva
+    why: >
+      Una rama ya fusionada y sin actividad (stale) o una rama sin upstream ni
+      fusion y sin actividad (orphaned). Nunca se propone tocar una rama: la
+      accion es siempre revisar.
+    severity: low
+    risk: high
+    confidence: 0.7
+    scope: project
+    match:
+      all:
+        - is_git_repo: true
+        - any:
+            - git_branch_stale: 90d
+            - git_branch_orphaned: 90d
+    suggests:
+      - type: review

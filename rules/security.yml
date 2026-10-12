@@ -75,3 +75,71 @@ rules:
                 - content_matches: 'pack_id:\s*hygiene\.'
     suggests:
       - type: review
+
+  - id: SEC-DB-001
+    title: Volcado de base de datos versionado
+    why: >
+      Un volcado versionado fuera de fixtures o migraciones suele contener datos
+      reales. Un volcado no es malo por existir: se pondera ubicacion, version
+      y referencias.
+    severity: high
+    risk: high
+    confidence: 0.6
+    match:
+      all:
+        - is_file: true
+        - any:
+            - glob: "**/*.sql"
+            - glob: "**/*.dump"
+            - glob: "**/*.sqlite"
+            - glob: "**/*.sqlite3"
+            - glob: "**/*.db"
+        - tracked_by_git: true
+        - referenced_by_source: false
+        - none:
+            - glob: "**/test/**"
+            - glob: "**/tests/**"
+            - glob: "**/fixtures/**"
+            - glob: "**/__fixtures__/**"
+            - glob: "**/spec/**"
+            - glob: "**/migrations/**"
+    suggests:
+      - type: review
+
+  - id: SEC-PERM-001
+    title: Clave privada con permisos abiertos
+    why: >
+      Una clave privada legible por grupo u otros puede leerla cualquier
+      proceso de la maquina. En Windows se reporta como no soportado.
+    severity: high
+    risk: low
+    confidence: 0.8
+    match:
+      all:
+        - is_file: true
+        - any:
+            - basename_regex: '^id_(rsa|dsa|ecdsa|ed25519)$'
+            - glob: "**/*.pem"
+            - glob: "**/*.key"
+        - mode_too_open: true
+    suggests:
+      - type: review
+
+  - id: SEC-HIST-001
+    title: Secreto en el historico de Git
+    why: >
+      Un secreto que estuvo versionado sigue en el historico aunque se borre
+      del arbol. La herramienta nunca reescribe historia: hay que rotar el
+      secreto.
+    severity: critical
+    risk: high
+    confidence: 0.7
+    scope: project
+    match:
+      all:
+        - is_git_repo: true
+        - in_git_history:
+            paths: ["**/.env", "**/.env.*", "**/id_rsa", "**/id_dsa", "**/id_ecdsa", "**/id_ed25519", "**/*.pem", "**/*.key"]
+            except: ["**/.env.example", "**/.env.sample"]
+    suggests:
+      - type: review
