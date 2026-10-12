@@ -88,8 +88,9 @@ describe('collectAudit', () => {
     }
   });
 
-  // Solo POSIX: en Windows icacls deny no hace fallar readdir.
-  it.runIf(process.platform !== 'win32')('marca las referencias incompletas si un directorio es ilegible', async () => {
+  // Solo POSIX y sin root: en Windows icacls deny no hace fallar readdir, y
+  // root lee el directorio aunque tenga modo 000.
+  it.runIf(process.platform !== 'win32' && process.getuid?.() !== 0)('marca las referencias incompletas si un directorio es ilegible', async () => {
     const sub = path.join(root, 'cerrado');
     await mkdir(sub);
     await writeFile(path.join(sub, 'x.md'), 'debug.log');

@@ -63,7 +63,8 @@ obliga a rehacer tareas.
    `FS-TEMP-001` (confianza 0.9, riesgo `safe`) llega a proponer cuarentena.
 9. **Referencias indeterminadas bloquean la cuarentena.** Si la búsqueda de
    referencias agota su tope, salta un fichero fuente por tamaño o por error de
-   lectura, o el inventario está truncado, ningún fichero va a cuarentena (§6:
+   lectura, el inventario está truncado, un directorio no se pudo leer o un
+   fichero fuente es un symlink (no se sigue), ningún fichero va a cuarentena (§6:
    "si `referenced_by_source` no se pudo determinar"). En repos con un
    `package-lock.json` de más de 2 MB esto bloquea toda cuarentena. Es un
    límite conocido y aceptado: se resolverá con búsqueda en streaming, no
