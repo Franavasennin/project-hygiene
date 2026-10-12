@@ -149,3 +149,60 @@ describe('planOperations', () => {
     expect([...EXECUTABLE_TYPES]).toEqual(['quarantine']);
   });
 });
+
+describe('planOperations falla cerrado', () => {
+  it('NaN en la confianza o en el umbral degrada a review', () => {
+    expect(planOperations(entradaPlanner([hallazgo('a.log', { confidence: NaN })]))[0])
+      .toMatchObject({ type: 'review', degradeReason: 'low-confidence' });
+    expect(planOperations(entradaPlanner([hallazgo('a.log')], { policy: { minConfidence: NaN } }))[0])
+      .toMatchObject({ type: 'review', degradeReason: 'low-confidence' });
+  });
+
+  it('quarantine + none en la misma ruta produce review en conflicto', () => {
+    const ops = planOperations(entradaPlanner([
+      hallazgo('a.log', { id: 'F-000001' }),
+      hallazgo('a.log', { id: 'F-000002', ruleId: 'X-NONE', suggests: ['none'] }),
+    ]));
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      type: 'review', degradedFrom: 'quarantine', degradeReason: 'conflicting-suggestions',
+    });
+  });
+
+  it('none + review sigue siendo review sin degradar', () => {
+    const ops = planOperations(entradaPlanner([
+      hallazgo('a.log', { id: 'F-000001', suggests: ['review'] }),
+      hallazgo('a.log', { id: 'F-000002', ruleId: 'X-NONE', suggests: ['none'] }),
+    ]));
+    expect(ops[0]).toMatchObject({ type: 'review', degradedFrom: null, degradeReason: null });
+  });
+
+  it('none con riesgo unknown + quarantine produce review con riesgo unknown', () => {
+    const ops = planOperations(entradaPlanner([
+      hallazgo('a.log', { id: 'F-000001' }),
+      hallazgo('a.log', { id: 'F-000002', ruleId: 'X-NONE', suggests: ['none'], risk: 'unknown' }),
+    ]));
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ type: 'review', risk: 'unknown' });
+  });
+
+  it.each([
+    ['symlink', { isSymlink: true }],
+    ['notDescended', { notDescended: true }],
+  ])('entrada %s va a review not-a-regular-file', (_n, extra) => {
+    const input = entradaPlanner([hallazgo('a.log')]);
+    input.inventory.files = [entrada('a.log', extra)];
+    expect(planOperations(input)[0]).toMatchObject({ type: 'review', degradeReason: 'not-a-regular-file' });
+  });
+
+  it('sin entrada en el inventario va a review not-a-regular-file', () => {
+    const input = entradaPlanner([hallazgo('a.log')]);
+    input.inventory.files = [];
+    expect(planOperations(input)[0]).toMatchObject({ type: 'review', degradeReason: 'not-a-regular-file' });
+  });
+
+  it('huella ausente del mapa (no solo null) va a review hash-unavailable', () => {
+    const input = entradaPlanner([hallazgo('a.log')], { hashes: new Map() });
+    expect(planOperations(input)[0]).toMatchObject({ type: 'review', degradeReason: 'hash-unavailable' });
+  });
+});

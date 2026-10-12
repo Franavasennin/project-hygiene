@@ -56,7 +56,7 @@ function resolve(f: Finding, input: PlannerInput, byPath: Map<string, FileEntry>
   if (f.risk === 'unknown') return degrade('unknown-risk');
   if (primary === 'none') return { type: 'none', degradedFrom: null, degradeReason: null };
   if (insideUnknownBoundary(f.path, input.inventory)) return degrade('unknown-project-boundary');
-  if (f.confidence < input.policy.minConfidence) return degrade('low-confidence');
+  if (!(f.confidence >= input.policy.minConfidence)) return degrade('low-confidence');
 
   if (primary === 'quarantine') {
     const entry = byPath.get(f.path);
@@ -70,7 +70,13 @@ function resolve(f: Finding, input: PlannerInput, byPath: Map<string, FileEntry>
 
 /** Varias reglas sobre la misma ruta: si no coinciden, gana review. */
 function merge(resolutions: Resolution[]): Resolution {
-  const types = [...new Set(resolutions.map((r) => r.type))].filter((t) => t !== 'none');
+  const all = new Set(resolutions.map((r) => r.type));
+  const types = [...all].filter((t) => t !== 'none');
+  // Un none sin degradar junto a una operacion activa es un desacuerdo: gana review.
+  const active = types.find((t) => t !== 'review');
+  if (all.has('none') && active) {
+    return { type: 'review', degradedFrom: active, degradeReason: 'conflicting-suggestions' };
+  }
   if (types.length === 0) return { type: 'none', degradedFrom: null, degradeReason: null };
   if (types.length === 1) {
     const type = types[0]!;
