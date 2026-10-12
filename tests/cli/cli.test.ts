@@ -14,6 +14,7 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), 'hyg-cli-'));
   home = await mkdtemp(path.join(tmpdir(), 'hyg-cli-home-'));
   process.env.HYGIENE_HOME = home;
+  process.env.HYGIENE_USER_CONFIG = path.join(tmpdir(), 'hyg-no-existe.yml');
   salida = [];
 });
 afterEach(async () => {
@@ -97,6 +98,20 @@ describe('main', () => {
     await writeFile(ficheroComoRoot, 'x');
     const code = await main(['audit', ficheroComoRoot], print);
     expect(code).toBe(2);
+  });
+
+  it('plan respeta el umbral de confianza del .hygienerc.yml', async () => {
+    await logViejo('debug.log');
+    await writeFile(path.join(root, '.hygienerc.yml'), 'planner:\n  min_confidence: 0.95\n');
+    expect(await main(['plan', root, '--json'], print)).toBe(0);
+    const plan = JSON.parse(salida.join('\n')) as { operations: { path: string; type: string; degradeReason: string }[] };
+    expect(plan.operations.find((o) => o.path === 'debug.log'))
+      .toMatchObject({ type: 'review', degradeReason: 'low-confidence' });
+  });
+
+  it('un .hygienerc.yml invalido devuelve 2', async () => {
+    await writeFile(path.join(root, '.hygienerc.yml'), 'desconocido: 1\n');
+    expect(await main(['audit', root], print)).toBe(2);
   });
 
   it('approve sin IDs ni --risk devuelve 2', async () => {

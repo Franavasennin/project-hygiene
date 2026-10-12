@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
+import { loadConfig, type HygieneConfig } from '../config/load.js';
 import { runPlan } from '../plan.js';
 import { runClean } from '../clean.js';
 import { loadPacks } from '../rules/schema.js';
@@ -64,6 +65,16 @@ async function resolveDir(target: string | undefined, print: Printer): Promise<s
     return null;
   }
   return root;
+}
+
+function engineOptions(root: string, config: HygieneConfig) {
+  return {
+    root,
+    rulesDir: RULES_DIR,
+    limits: config.limits,
+    minConfidence: config.minConfidence,
+    defaultBranch: config.defaultBranch,
+  };
 }
 
 export async function main(argv: string[], print: Printer = console.log): Promise<number> {
@@ -128,7 +139,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       const root = await resolveDir(target, print);
       if (!root) return 2;
 
-      const result = await runAudit({ root, rulesDir: RULES_DIR });
+      const result = await runAudit(engineOptions(root, await loadConfig(root)));
 
       if (command === 'scan') {
         print(JSON.stringify(result.inventory, replacer, 2));
@@ -142,7 +153,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
     if (command === 'plan') {
       const root = await resolveDir(target, print);
       if (!root) return 2;
-      const { audit, plan } = await runPlan({ root, rulesDir: RULES_DIR });
+      const { audit, plan } = await runPlan(engineOptions(root, await loadConfig(root)));
       print(json ? JSON.stringify(plan, null, 2) : renderPlan(plan));
       return audit.score.clean ? 0 : 1;
     }
@@ -169,7 +180,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
         return 2;
       }
 
-      const { plan } = await runPlan({ root, rulesDir: RULES_DIR });
+      const { plan } = await runPlan(engineOptions(root, await loadConfig(root)));
       const { selected, errors } = selectOperations({
         plan, ids, risk: risk as ApprovableRisk | undefined,
       });
@@ -200,7 +211,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       const root = await resolveDir(parsed.values.root, print);
       if (!root) return 2;
 
-      const result = await runClean({ root, rulesDir: RULES_DIR, home: resolveHome() });
+      const result = await runClean({ ...engineOptions(root, await loadConfig(root)), home: resolveHome() });
       if (result.status === 'no-approvals') {
         print('ERROR: No approved operations. Nothing was modified.');
         return 2;

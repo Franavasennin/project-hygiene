@@ -15,6 +15,8 @@ export interface AuditOptions {
   root: string;
   rulesDir: string;
   limits?: Partial<Limits>;
+  /** Rama por defecto configurada (`git.default_branch`). */
+  defaultBranch?: string;
 }
 
 export interface AuditFacts {

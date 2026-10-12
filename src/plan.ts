@@ -1,14 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { AuditResult, Operation, Plan } from './core/types.js';
-import type { Limits } from './core/limits.js';
 import { ENGINE_VERSION } from './core/version.js';
-import { collectAudit } from './audit.js';
+import { collectAudit, type AuditOptions } from './audit.js';
 import { planOperations, DEFAULT_POLICY, type PlannerPolicy } from './planner/plan.js';
 
-export interface PlanOptions {
-  root: string;
-  rulesDir: string;
-  limits?: Partial<Limits>;
+export interface PlanOptions extends AuditOptions {
   minConfidence?: number;
 }
 

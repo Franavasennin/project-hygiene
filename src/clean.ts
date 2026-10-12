@@ -12,6 +12,8 @@ export interface CleanOptions {
   rulesDir: string;
   home: string;
   limits?: Partial<Limits>;
+  minConfidence?: number;
+  defaultBranch?: string;
   now?: Date;
 }
 
@@ -29,7 +31,10 @@ export async function runClean(o: CleanOptions): Promise<CleanResult> {
   // Una aprobacion caduca si el plan que la origino ya no coincide con el
   // disco: cada operacion aprobada tiene que seguir en el plan recalculado
   // ahora, con el mismo tipo, ruta y hash. Si falta una, no se mueve nada.
-  const { plan } = await runPlan({ root: o.root, rulesDir: o.rulesDir, limits: o.limits });
+  const { plan } = await runPlan({
+    root: o.root, rulesDir: o.rulesDir, limits: o.limits,
+    minConfidence: o.minConfidence, defaultBranch: o.defaultBranch,
+  });
   const current = new Map(plan.operations.map((op) => [
     approvalKey({ type: op.type, path: op.path, sha256: op.source.sha256 }), op,
   ]));
