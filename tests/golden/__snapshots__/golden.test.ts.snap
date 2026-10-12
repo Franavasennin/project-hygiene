@@ -6,6 +6,8 @@ exports[`fixture dorado > detecta el conjunto esperado de reglas 1`] = `
   "AI-SCRIPT-001",
   "FS-DUP-001",
   "FS-NAMING-001",
+  "FS-ROOT-001",
+  "GIT-NOREPO-001",
   "SEC-CERT-001",
 ]
 `;
