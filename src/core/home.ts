@@ -24,7 +24,10 @@ async function realpathLoose(p: string): Promise<string> {
     try {
       const real = await realpath(current);
       return path.join(real, ...[...rest].reverse());
-    } catch {
+    } catch (err) {
+      // fail closed: solo "no existe" justifica subir; cualquier otro error se propaga
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err;
       const parent = path.dirname(current);
       if (parent === current) return abs;
       rest.push(path.basename(current));

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { resolveHome, assertHomeOutside, HomeInsideWorkspaceError } from '../../src/core/home.js';
@@ -47,6 +47,14 @@ describe('assertHomeOutside', () => {
     const ws = path.join(hyg, 'ws');
     await mkdir(ws, { recursive: true });
     await expect(assertHomeOutside(hyg, ws)).rejects.toBeInstanceOf(HomeInsideWorkspaceError);
+  });
+
+  it('rechaza una base que llega al workspace a traves de un enlace', async () => {
+    const ws = path.join(base, 'ws');
+    await mkdir(ws);
+    await symlink(ws, path.join(base, 'enlace'), 'junction');
+    await expect(assertHomeOutside(path.join(base, 'enlace', '.hygiene'), ws))
+      .rejects.toBeInstanceOf(HomeInsideWorkspaceError);
   });
 
   it('no confunde un prefijo de nombre con contencion', async () => {
