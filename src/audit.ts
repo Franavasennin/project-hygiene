@@ -58,17 +58,20 @@ async function findReferences(files: FileEntry[], budget: Budget): Promise<Refer
   let complete = true;
   let scanned = 0;
   for (const f of candidates) {
+    if (!SOURCE_EXT.has(path.extname(f.path))) continue;
+    // Un symlink no se sigue: readFile leeria el destino, que puede estar
+    // fuera del arbol y saltarse el tope de tamano (mismo criterio que
+    // collectors/content.ts). Es un fichero fuente sin examinar, asi que las
+    // referencias quedan incompletas (decision 9: lo desconocido no se toca).
+    if (f.isSymlink) {
+      complete = false;
+      continue;
+    }
     if (scanned >= budget.limits.maxReferenceSearchFiles) {
       budget.note('maxReferenceSearchFiles');
       complete = false;
       break;
     }
-    if (!SOURCE_EXT.has(path.extname(f.path))) continue;
-    // Un symlink no se sigue: readFile leeria el destino, que puede estar
-    // fuera del arbol y saltarse el tope de tamano (mismo criterio que
-    // collectors/content.ts). Si el destino esta dentro del arbol, se examina
-    // por su propia entrada.
-    if (f.isSymlink) continue;
     if (f.size > budget.limits.maxFileSizeForContentScan) {
       complete = false;
       continue;
@@ -115,12 +118,10 @@ async function duplicateHashes(files: FileEntry[], content: ContentCache, budget
 export async function collectAudit(options: AuditOptions): Promise<CollectedAudit> {
   const budget = new Budget({ ...DEFAULT_LIMITS, ...options.limits });
 
-  // walk() tambien devuelve `unreadable: string[]` (rutas que no se pudieron
-  // leer durante el recorrido). El tipo `Inventory` de core/types.ts no tiene
-  // un campo para eso -- solo tiene `truncated`, no `unreadable` -- asi que
-  // aqui se descarta deliberadamente. Exponerlo en el inventario queda para
-  // una tarea futura si se decide que el resto del pipeline lo necesita.
-  const { files, truncated } = await walk(options.root, budget);
+  // walk() devuelve `unreadable` (rutas que no se pudieron leer). No hay campo
+  // en `Inventory`, pero un directorio ilegible puede ocultar ficheros fuente,
+  // asi que se usa para marcar las referencias como incompletas.
+  const { files, truncated, unreadable } = await walk(options.root, budget);
   const projects = await detectProjects(options.root);
   // collectGit(cwd) devuelve los GitFacts del repo que contiene `cwd` (o un
   // GitFacts "vacio" con isRepo=false si no hay repo). No hay un concepto de
@@ -179,7 +180,7 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
     result: { inventory, findings, limits, score },
     facts: {
       referenced: refs.referenced,
-      referencesComplete: refs.complete && !truncated,
+      referencesComplete: refs.complete && !truncated && unreadable.length === 0,
       content,
     },
   };

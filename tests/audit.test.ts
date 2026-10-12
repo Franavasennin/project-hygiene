@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, rm, utimes, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, utimes, symlink, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runAudit, collectAudit } from '../src/audit.js';
@@ -74,7 +74,7 @@ describe('collectAudit', () => {
     expect(facts.referencesComplete).toBe(false);
   });
 
-  it.runIf(process.platform !== 'win32')('no sigue symlinks al buscar referencias', async () => {
+  it.runIf(process.platform !== 'win32')('no sigue symlinks al buscar referencias y marca las referencias incompletas', async () => {
     const fuera = await mkdtemp(path.join(tmpdir(), 'hyg-fuera-'));
     try {
       await writeFile(path.join(fuera, 'grande.md'), 'debug.log '.repeat(1000));
@@ -82,9 +82,23 @@ describe('collectAudit', () => {
       await symlink(path.join(fuera, 'grande.md'), path.join(root, 'enlace.md'));
       const { facts } = await collectAudit({ root, rulesDir: RULES });
       expect(facts.referenced.has('debug.log')).toBe(false);
-      expect(facts.referencesComplete).toBe(true);
+      expect(facts.referencesComplete).toBe(false);
     } finally {
       await rm(fuera, { recursive: true, force: true });
+    }
+  });
+
+  // Solo POSIX: en Windows icacls deny no hace fallar readdir.
+  it.runIf(process.platform !== 'win32')('marca las referencias incompletas si un directorio es ilegible', async () => {
+    const sub = path.join(root, 'cerrado');
+    await mkdir(sub);
+    await writeFile(path.join(sub, 'x.md'), 'debug.log');
+    await chmod(sub, 0o000);
+    try {
+      const { facts } = await collectAudit({ root, rulesDir: RULES });
+      expect(facts.referencesComplete).toBe(false);
+    } finally {
+      await chmod(sub, 0o755);
     }
   });
 
