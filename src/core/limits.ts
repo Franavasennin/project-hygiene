@@ -5,6 +5,7 @@ export interface Limits {
   maxReferenceSearchFiles: number;
   maxMatchTreeNodes: number;
   maxRegexInputLength: number;
+  maxGitHistoryCommits: number;
   timeoutMsPerRule: number;
   timeoutMsTotal: number;
 }
@@ -16,6 +17,7 @@ export const DEFAULT_LIMITS: Limits = {
   maxReferenceSearchFiles: 20_000,
   maxMatchTreeNodes: 256,
   maxRegexInputLength: 256 * 1024,
+  maxGitHistoryCommits: 5_000,
   timeoutMsPerRule: 5_000,
   timeoutMsTotal: 300_000,
 };
@@ -31,6 +33,7 @@ export const LIMIT_WIRE_NAMES: Record<keyof Limits, string> = {
   maxReferenceSearchFiles: 'max_reference_search_files',
   maxMatchTreeNodes: 'max_match_tree_nodes',
   maxRegexInputLength: 'max_regex_input_length',
+  maxGitHistoryCommits: 'max_git_history_commits',
   timeoutMsPerRule: 'timeout_ms_per_rule',
   timeoutMsTotal: 'timeout_ms_total',
 };
