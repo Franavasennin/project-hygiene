@@ -110,7 +110,10 @@ export async function evalPredicate(
     case 'entropy_gt': {
       const text = await ctx.content.text(e);
       if (text === null) return false;
-      const tokens = text.split(/[\s"'`,;]+/).filter((t) => t.length >= 16);
+      // Un secreto usa el alfabeto base64/hex/alfanumerico (mas - _ + / =).
+      // Partir por cualquier otro caracter evita que una expresion de codigo
+      // pegada, como `(a.indexOf(b.c)`, cuente como un token de alta entropia.
+      const tokens = text.split(/[^A-Za-z0-9+/=_-]+/).filter((t) => t.length >= 16);
       if (tokens.length === 0) return false;
       const best = tokens.reduce((max, t) => Math.max(max, shannonEntropy(t)), 0);
       return best > Number(value);
