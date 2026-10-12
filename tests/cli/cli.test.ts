@@ -27,6 +27,20 @@ describe('main', () => {
     expect(() => JSON.parse(salida.join('\n'))).not.toThrow();
   });
 
+  it('plan sobre un arbol limpio devuelve 0 y no propone nada', async () => {
+    const code = await main(['plan', root], print);
+    expect(code).toBe(0);
+    expect(salida.join('\n')).toContain('Sin operaciones propuestas.');
+  });
+
+  it('plan --json emite el plan con sus operaciones', async () => {
+    await writeFile(path.join(root, 'id_rsa'), '-----BEGIN RSA PRIVATE KEY-----');
+    const code = await main(['plan', root, '--json'], print);
+    expect(code).toBe(1);
+    const plan = JSON.parse(salida.join('\n')) as { operations: { path: string }[] };
+    expect(plan.operations.some((o) => o.path === 'id_rsa')).toBe(true);
+  });
+
   it('explain devuelve el porque de una regla', async () => {
     const code = await main(['explain', 'FS-TEMP-001'], print);
     expect(code).toBe(0);

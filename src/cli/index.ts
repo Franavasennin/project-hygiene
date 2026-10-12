@@ -4,8 +4,10 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
+import { runPlan } from '../plan.js';
 import { loadPacks } from '../rules/schema.js';
 import { renderReport } from '../report/human.js';
+import { renderPlan } from '../report/plan.js';
 
 export type Printer = (line: string) => void;
 
@@ -17,6 +19,7 @@ const USAGE = `hygiene <comando> [ruta] [opciones]
 Comandos:
   scan [ruta]            Inventario, sin juicio
   audit [ruta]            Hallazgos y puntuacion
+  plan [ruta]            Operaciones propuestas con ID, sin modificar nada
   explain <RULE-ID>      Por que existe una regla
 
 Opciones:
@@ -27,6 +30,22 @@ Codigos de salida: 0 limpio, 1 hallazgos, 2 fallo de la herramienta.`;
 
 function replacer(_key: string, value: unknown): unknown {
   return value instanceof Set ? [...value] : value;
+}
+
+async function resolveDir(target: string | undefined, print: Printer): Promise<string | null> {
+  const root = path.resolve(target ?? process.cwd());
+  let rootStat;
+  try {
+    rootStat = await stat(root);
+  } catch {
+    print(`La ruta no existe: ${root}`);
+    return null;
+  }
+  if (!rootStat.isDirectory()) {
+    print(`La ruta no es un directorio: ${root}`);
+    return null;
+  }
+  return root;
 }
 
 export async function main(argv: string[], print: Printer = console.log): Promise<number> {
@@ -81,19 +100,8 @@ export async function main(argv: string[], print: Printer = console.log): Promis
     }
 
     if (command === 'scan' || command === 'audit') {
-      const root = path.resolve(target ?? process.cwd());
-
-      let rootStat;
-      try {
-        rootStat = await stat(root);
-      } catch {
-        print(`La ruta no existe: ${root}`);
-        return 2;
-      }
-      if (!rootStat.isDirectory()) {
-        print(`La ruta no es un directorio: ${root}`);
-        return 2;
-      }
+      const root = await resolveDir(target, print);
+      if (!root) return 2;
 
       const result = await runAudit({ root, rulesDir: RULES_DIR });
 
@@ -104,6 +112,14 @@ export async function main(argv: string[], print: Printer = console.log): Promis
 
       print(json ? JSON.stringify(result, replacer, 2) : renderReport(result));
       return result.score.clean ? 0 : 1;
+    }
+
+    if (command === 'plan') {
+      const root = await resolveDir(target, print);
+      if (!root) return 2;
+      const { audit, plan } = await runPlan({ root, rulesDir: RULES_DIR });
+      print(json ? JSON.stringify(plan, null, 2) : renderPlan(plan));
+      return audit.score.clean ? 0 : 1;
     }
 
     print(`Comando desconocido: ${command}`);

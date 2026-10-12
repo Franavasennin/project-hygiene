@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runAudit } from '../../src/audit.js';
+import { runPlan } from '../../src/plan.js';
 
 const run = promisify(execFile);
 
@@ -77,6 +78,19 @@ describe('los secretos no salen en claro', () => {
 
     const findingIds = result.findings.map((f) => f.ruleId);
     expect(findingIds).toContain('SEC-KEY-001');
+  });
+
+  it('el plan serializado tampoco contiene el secreto', async () => {
+    await run('git', ['init', '-b', 'main'], { cwd: root });
+    await run('git', ['config', 'user.email', 't@t.t'], { cwd: root });
+    await run('git', ['config', 'user.name', 'T'], { cwd: root });
+    await writeFile(path.join(root, 'config.ts'), `export const KEY = "${SECRETO}";\n`);
+    await run('git', ['add', 'config.ts'], { cwd: root });
+    await run('git', ['commit', '-m', 'x'], { cwd: root });
+
+    const { plan } = await runPlan({ root, rulesDir: path.join(process.cwd(), 'rules') });
+    expect(plan.operations.length).toBeGreaterThan(0);
+    expect(JSON.stringify(plan)).not.toContain(SECRETO);
   });
 
   it('evidence de cada finding solo contiene metadatos conocidos, nunca contenido', async () => {
