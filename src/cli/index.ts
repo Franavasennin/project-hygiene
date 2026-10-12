@@ -8,6 +8,11 @@ import { runPlan } from '../plan.js';
 import { loadPacks } from '../rules/schema.js';
 import { renderReport } from '../report/human.js';
 import { renderPlan } from '../report/plan.js';
+import { resolveHome } from '../core/home.js';
+import { deleteApprovals, loadApprovals, saveApprovals } from '../approvals/store.js';
+import {
+  APPROVABLE_RISKS, mergeApproval, selectOperations, type ApprovableRisk,
+} from '../approvals/approve.js';
 
 export type Printer = (line: string) => void;
 
@@ -21,10 +26,17 @@ Comandos:
   audit [ruta]            Hallazgos y puntuacion
   plan [ruta]            Operaciones propuestas con ID, sin modificar nada
   explain <RULE-ID>      Por que existe una regla
+  approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
 
 Opciones:
   --json                 Salida legible por maquina
+  --root <ruta>          Workspace para approve y clean (por defecto, el actual)
+  --risk <nivel>         approve: todo lo ejecutable hasta ese riesgo (safe, low, medium, high)
+  --reset                approve: descarta las aprobaciones pendientes
   --help                 Esta ayuda
+
+Entorno:
+  HYGIENE_HOME           Base de cuarentena y aprobaciones (por defecto ~/.hygiene)
 
 Codigos de salida: 0 limpio, 1 hallazgos, 2 fallo de la herramienta.`;
 
@@ -54,7 +66,13 @@ export async function main(argv: string[], print: Printer = console.log): Promis
     parsed = parseArgs({
       args: argv,
       allowPositionals: true,
-      options: { json: { type: 'boolean' }, help: { type: 'boolean' } },
+      options: {
+        json: { type: 'boolean' },
+        help: { type: 'boolean' },
+        root: { type: 'string' },
+        risk: { type: 'string' },
+        reset: { type: 'boolean' },
+      },
     });
   } catch (err) {
     print(err instanceof Error ? err.message : String(err));
@@ -120,6 +138,50 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       const { audit, plan } = await runPlan({ root, rulesDir: RULES_DIR });
       print(json ? JSON.stringify(plan, null, 2) : renderPlan(plan));
       return audit.score.clean ? 0 : 1;
+    }
+
+    if (command === 'approve') {
+      const root = await resolveDir(parsed.values.root, print);
+      if (!root) return 2;
+      const home = resolveHome();
+
+      if (parsed.values.reset === true) {
+        const borrado = await deleteApprovals(home, root);
+        print(borrado ? 'Aprobaciones pendientes descartadas.' : 'No habia aprobaciones pendientes.');
+        return 0;
+      }
+
+      const ids = parsed.positionals.slice(1);
+      const risk = parsed.values.risk;
+      if (risk !== undefined && !(APPROVABLE_RISKS as readonly string[]).includes(risk)) {
+        print(`--risk no valido: ${risk}. Valores: ${APPROVABLE_RISKS.join(', ')}`);
+        return 2;
+      }
+      if (ids.length === 0 && risk === undefined) {
+        print('Indica IDs de operacion o --risk <nivel>.');
+        return 2;
+      }
+
+      const { plan } = await runPlan({ root, rulesDir: RULES_DIR });
+      const { selected, errors } = selectOperations({
+        plan, ids, risk: risk as ApprovableRisk | undefined,
+      });
+      if (errors.length > 0) {
+        for (const e of errors) print(e);
+        print('No se ha registrado ninguna aprobacion.');
+        return 2;
+      }
+      if (selected.length === 0) {
+        print('Ninguna operacion aprobable coincide. No se ha registrado nada.');
+        return 0;
+      }
+
+      const record = mergeApproval(await loadApprovals(home, root), plan, selected, argv.slice(1), new Date());
+      const file = await saveApprovals(home, record);
+      print(`Aprobadas: ${selected.map((o) => o.id).join(' ')}`);
+      print(`Registrado en ${file}`);
+      print(`Para ejecutar: hygiene clean --approved --root "${root}"`);
+      return 0;
     }
 
     print(`Comando desconocido: ${command}`);
