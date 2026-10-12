@@ -1,7 +1,16 @@
 import picomatch from 'picomatch';
-import type { FileEntry, GitFacts } from '../core/types.js';
+import type { FileEntry, GitFacts, ProjectCandidate } from '../core/types.js';
 import { compile } from '../rules/regex-guard.js';
 import { shannonEntropy } from '../collectors/content.js';
+
+export interface WorkspaceFacts {
+  projects: ProjectCandidate[];
+  /** El root no es proyecto y contiene al menos un proyecto (spec §2). */
+  rootIsWorkspace: boolean;
+  /** Numero de hijos directos inventariados por directorio ('.' es el root). */
+  childCounts: Map<string, number>;
+  entryAt(path: string): FileEntry | undefined;
+}
 
 export interface EvalContext {
   entry: FileEntry;
@@ -13,6 +22,10 @@ export interface EvalContext {
   duplicateHashes: Set<string>;
   referencedPaths: Set<string>;
   now: number;
+  /** Opcional para que los tests de predicados de fichero no lo necesiten. */
+  workspace?: WorkspaceFacts;
+  /** Inyectable en tests; por defecto process.platform. */
+  platform?: NodeJS.Platform;
 }
 
 export class UnknownPredicateError extends Error {}

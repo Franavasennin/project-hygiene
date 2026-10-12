@@ -68,6 +68,7 @@ export async function walk(root: string, budget: Budget): Promise<WalkResult> {
         mtimeMs: st.mtimeMs,
         depth: depth + 1,
         notDescended: generated,
+        mode: st.mode,
       });
 
       if (isDir && !generated && !st.isSymbolicLink() && depth + 1 < MAX_SAFE_DEPTH) {

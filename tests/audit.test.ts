@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, rm, utimes, symlink, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { runAudit, collectAudit } from '../src/audit.js';
 
 const RULES = path.join(process.cwd(), 'rules');
@@ -109,5 +111,23 @@ describe('collectAudit', () => {
     const { result } = await collectAudit({ root, rulesDir: RULES });
     expect(result.findings).toEqual(directo.findings);
     expect(result.score).toEqual(directo.score);
+  });
+});
+
+describe('workspace con varios repos', () => {
+  it('los hechos de git de un repo hijo se aplican a sus ficheros', async () => {
+    const run = promisify(execFile);
+    const app = path.join(root, 'app');
+    await mkdir(app);
+    await run('git', ['init', '-q', '-b', 'main'], { cwd: app });
+    await run('git', ['config', 'user.email', 't@t.t'], { cwd: app });
+    await run('git', ['config', 'user.name', 'T'], { cwd: app });
+    await writeFile(path.join(app, '.env'), 'K=v\n');
+    await run('git', ['add', '.env'], { cwd: app });
+    await run('git', ['commit', '-q', '-m', 'x'], { cwd: app });
+
+    const result = await runAudit({ root, rulesDir: RULES });
+    expect(Object.keys(result.inventory.gitByProject)).toEqual(['app']);
+    expect(result.findings.some((f) => f.ruleId === 'SEC-SECRET-001' && f.path === 'app/.env')).toBe(true);
   });
 });
