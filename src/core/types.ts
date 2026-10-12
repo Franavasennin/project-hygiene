@@ -15,6 +15,8 @@ export interface FileEntry {
   depth: number;
   /** true si es un directorio generado cuyo contenido no se recorrió. */
   notDescended: boolean;
+  /** Modo de lstat. En Windows no refleja permisos reales. */
+  mode?: number;
 }
 
 export type ProjectStatus = 'project' | 'unknown-boundary' | 'not-project';
@@ -26,6 +28,14 @@ export interface ProjectCandidate {
   status: ProjectStatus;
 }
 
+export interface BranchFact {
+  name: string;
+  upstream: string | null;
+  lastCommitMs: number;
+  /** Fusionada en la rama por defecto. false si no hay rama por defecto. */
+  merged: boolean;
+}
+
 export interface GitFacts {
   isRepo: boolean;
   root: string | null;
@@ -35,6 +45,13 @@ export interface GitFacts {
   ignoredFiles: Set<string>;
   dirtyFiles: Set<string>;
   stashCount: number;
+  /** Directorios ignorados enteros, sin barra final. */
+  ignoredDirs?: Set<string>;
+  stashTimesMs?: number[];
+  branches?: BranchFact[];
+  /** Rutas tocadas en el historial acotado, relativas a la raiz del repo. */
+  historyPaths?: Set<string>;
+  historyTruncated?: boolean;
 }
 
 export interface Inventory {
