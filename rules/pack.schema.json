@@ -24,6 +24,7 @@
         "risk": { "enum": ["safe", "low", "medium", "high", "unknown"] },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
         "deprecated": { "type": "boolean" },
+        "scope": { "enum": ["file", "project"] },
         "docs": { "type": "string" },
         "evidence": { "type": "array", "items": { "type": "string" } },
         "match": { "$ref": "#/definitions/match" },
@@ -68,7 +69,28 @@
         "content_matches": { "type": "string" },
         "entropy_gt": { "type": "number" },
         "sha256_duplicate": { "type": "boolean" },
-        "referenced_by_source": { "type": "boolean" }
+        "referenced_by_source": { "type": "boolean" },
+        "in_project": { "type": "boolean" },
+        "root_is_workspace": { "type": "boolean" },
+        "in_git_repo": { "type": "boolean" },
+        "mode_too_open": { "type": "boolean" },
+        "similar_to_readme_gt": { "type": "number", "minimum": 0, "maximum": 1 },
+        "project_status": { "enum": ["project", "unknown-boundary", "not-project"] },
+        "has_child": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "is_git_repo": { "type": "boolean" },
+        "git_worktree_orphan": { "type": "boolean" },
+        "git_stash_older_than": { "type": "string", "pattern": "^\\d+[dhm]$" },
+        "git_branch_stale": { "type": "string", "pattern": "^\\d+[dhm]$" },
+        "git_branch_orphaned": { "type": "string", "pattern": "^\\d+[dhm]$" },
+        "in_git_history": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["paths"],
+          "properties": {
+            "paths": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "except": { "type": "array", "items": { "type": "string" } }
+          }
+        }
       }
     }
   }

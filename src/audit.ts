@@ -189,11 +189,16 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
   };
 
   const packs = await loadPacks(options.rulesDir);
-  const { findings, limits } = await evaluateAll({ inventory, packs, budget, makeContext });
+  const projectEntries = projects
+    .map((c) => byPath.get(c.path))
+    .filter((e): e is FileEntry => e !== undefined);
+  const { findings, limits, unsupported } = await evaluateAll({
+    inventory, packs, budget, makeContext, projectEntries,
+  });
   const score = computeScore(findings, limits);
 
   return {
-    result: { inventory, findings, limits, score },
+    result: { inventory, findings, limits, score, unsupported },
     facts: {
       referenced: refs.referenced,
       referencesComplete: refs.complete && !truncated && unreadable.length === 0,

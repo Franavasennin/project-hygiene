@@ -1,6 +1,8 @@
 import type { Rule, MatchNode, Pack } from '../rules/schema.js';
-import type { Finding, LimitHit, Inventory } from '../core/types.js';
-import { evalPredicate, type EvalContext } from './predicates.js';
+import type { FileEntry, Finding, LimitHit, Inventory, UnsupportedHit } from '../core/types.js';
+import {
+  evalPredicate, RuleLimitError, UnsupportedPredicateError, type EvalContext,
+} from './predicates.js';
 import type { Budget } from '../core/limits.js';
 
 export class MalformedMatchNodeError extends Error {}
@@ -45,11 +47,14 @@ export interface EvaluationInput {
   packs: Pack[];
   budget: Budget;
   makeContext(path: string): EvalContext;
+  /** Entradas contra las que se evaluan las reglas con scope: project. */
+  projectEntries?: FileEntry[];
 }
 
 export interface EvaluationOutput {
   findings: Finding[];
   limits: LimitHit[];
+  unsupported: UnsupportedHit[];
 }
 
 /**
@@ -74,6 +79,7 @@ export interface EvaluationOutput {
 export async function evaluateAll(input: EvaluationInput): Promise<EvaluationOutput> {
   const findings: Finding[] = [];
   const limits: LimitHit[] = [];
+  const unsupported: UnsupportedHit[] = [];
   let counter = 0;
   let totalTimedOut = false;
 
@@ -91,14 +97,30 @@ export async function evaluateAll(input: EvaluationInput): Promise<EvaluationOut
       input.budget.startRule(rule.id);
       let matches = 0;
       let stopped: string | null = null;
+      let limitNoted = false;
+      const entries = rule.scope === 'project' ? (input.projectEntries ?? []) : input.inventory.files;
 
-      for (const entry of input.inventory.files) {
+      for (const entry of entries) {
         if (input.budget.ruleExpired()) { stopped = 'timeout_ms_per_rule'; break; }
         if (input.budget.totalExpired()) { stopped = 'timeout_ms_total'; totalTimedOut = true; break; }
         if (!input.budget.within('maxRuleMatches', matches)) { stopped = 'max_rule_matches'; break; }
 
-        const ctx = input.makeContext(entry.path);
-        if (!(await evaluateRule(rule, ctx))) continue;
+        let matched: boolean;
+        try {
+          matched = await evaluateRule(rule, input.makeContext(entry.path));
+        } catch (err) {
+          if (err instanceof RuleLimitError) {
+            if (!limitNoted) limits.push({ ruleId: rule.id, limit: err.limit });
+            limitNoted = true;
+            continue;
+          }
+          if (err instanceof UnsupportedPredicateError) {
+            unsupported.push({ ruleId: rule.id, reason: err.message });
+            break;
+          }
+          throw err;
+        }
+        if (!matched) continue;
 
         matches += 1;
         counter += 1;
@@ -121,5 +143,5 @@ export async function evaluateAll(input: EvaluationInput): Promise<EvaluationOut
     }
   }
 
-  return { findings, limits };
+  return { findings, limits, unsupported };
 }

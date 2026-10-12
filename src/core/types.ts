@@ -81,6 +81,11 @@ export interface LimitHit {
   limit: string;
 }
 
+export interface UnsupportedHit {
+  ruleId: string;
+  reason: string;
+}
+
 export interface Score {
   profile: string;
   engineVersion: string;
@@ -95,6 +100,8 @@ export interface AuditResult {
   findings: Finding[];
   limits: LimitHit[];
   score: Score;
+  /** Reglas que la plataforma no permite evaluar (spec §7, SEC-PERM-001). */
+  unsupported?: UnsupportedHit[];
 }
 
 export type OperationType = SuggestionType;

@@ -47,6 +47,12 @@ export function renderReport(result: AuditResult): string {
     for (const l of limits) out.push(`  RULE_EXECUTION_LIMIT ${l.ruleId} (${l.limit})`);
   }
 
+  if (result.unsupported && result.unsupported.length > 0) {
+    out.push('');
+    out.push('No soportado en esta plataforma:');
+    for (const u of result.unsupported) out.push(`  ${u.ruleId} (${u.reason})`);
+  }
+
   out.push('');
   if (score.clean) {
     out.push('Estado: LIMPIO');
