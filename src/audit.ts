@@ -17,11 +17,34 @@ export interface AuditOptions {
   limits?: Partial<Limits>;
 }
 
+export interface AuditFacts {
+  /** Rutas que algun fichero fuente menciona por su nombre. */
+  referenced: Set<string>;
+  /**
+   * false si la busqueda de referencias no pudo examinarlo todo: tope agotado,
+   * fichero fuente demasiado grande o ilegible, o inventario truncado. En ese
+   * caso la ausencia de referencia no demuestra nada (spec §6).
+   */
+  referencesComplete: boolean;
+  content: ContentCache;
+}
+
+export interface CollectedAudit {
+  result: AuditResult;
+  facts: AuditFacts;
+}
+
 const SOURCE_EXT = new Set([
   '.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.py', '.md', '.yml', '.yaml',
 ]);
 
-async function findReferences(files: FileEntry[], budget: Budget): Promise<Set<string>> {
+interface ReferenceScan {
+  referenced: Set<string>;
+  /** false si algun fichero fuente no se pudo examinar. */
+  complete: boolean;
+}
+
+async function findReferences(files: FileEntry[], budget: Budget): Promise<ReferenceScan> {
   const candidates = files.filter((f) => !f.isDir);
   const names = new Map<string, string[]>();
   for (const f of candidates) {
@@ -32,20 +55,31 @@ async function findReferences(files: FileEntry[], budget: Budget): Promise<Set<s
   }
 
   const referenced = new Set<string>();
+  let complete = true;
   let scanned = 0;
   for (const f of candidates) {
     if (scanned >= budget.limits.maxReferenceSearchFiles) {
       budget.note('maxReferenceSearchFiles');
+      complete = false;
       break;
     }
     if (!SOURCE_EXT.has(path.extname(f.path))) continue;
-    if (f.size > budget.limits.maxFileSizeForContentScan) continue;
+    // Un symlink no se sigue: readFile leeria el destino, que puede estar
+    // fuera del arbol y saltarse el tope de tamano (mismo criterio que
+    // collectors/content.ts). Si el destino esta dentro del arbol, se examina
+    // por su propia entrada.
+    if (f.isSymlink) continue;
+    if (f.size > budget.limits.maxFileSizeForContentScan) {
+      complete = false;
+      continue;
+    }
     scanned += 1;
 
     let text: string;
     try {
       text = await readFile(f.absPath, 'utf8');
     } catch {
+      complete = false;
       continue;
     }
     for (const [base, paths] of names) {
@@ -54,7 +88,7 @@ async function findReferences(files: FileEntry[], budget: Budget): Promise<Set<s
       for (const p of paths) if (p !== f.path) referenced.add(p);
     }
   }
-  return referenced;
+  return { referenced, complete };
 }
 
 // Reutiliza maxReferenceSearchFiles como tope tambien para el escaneo de
@@ -78,7 +112,7 @@ async function duplicateHashes(files: FileEntry[], content: ContentCache, budget
   return new Set([...counts.entries()].filter(([, n]) => n > 1).map(([h]) => h));
 }
 
-export async function runAudit(options: AuditOptions): Promise<AuditResult> {
+export async function collectAudit(options: AuditOptions): Promise<CollectedAudit> {
   const budget = new Budget({ ...DEFAULT_LIMITS, ...options.limits });
 
   // walk() tambien devuelve `unreadable: string[]` (rutas que no se pudieron
@@ -105,7 +139,7 @@ export async function runAudit(options: AuditOptions): Promise<AuditResult> {
 
   const content = createContentCache(budget);
   const duplicates = await duplicateHashes(files, content, budget);
-  const referenced = await findReferences(files, budget);
+  const refs = await findReferences(files, budget);
   const byPath = new Map(files.map((f) => [f.path, f]));
   const now = Date.now();
 
@@ -132,7 +166,7 @@ export async function runAudit(options: AuditOptions): Promise<AuditResult> {
       git: git.isRepo ? git : null,
       content,
       duplicateHashes: duplicates,
-      referencedPaths: referenced,
+      referencedPaths: refs.referenced,
       now,
     };
   };
@@ -141,5 +175,16 @@ export async function runAudit(options: AuditOptions): Promise<AuditResult> {
   const { findings, limits } = await evaluateAll({ inventory, packs, budget, makeContext });
   const score = computeScore(findings, limits);
 
-  return { inventory, findings, limits, score };
+  return {
+    result: { inventory, findings, limits, score },
+    facts: {
+      referenced: refs.referenced,
+      referencesComplete: refs.complete && !truncated,
+      content,
+    },
+  };
+}
+
+export async function runAudit(options: AuditOptions): Promise<AuditResult> {
+  return (await collectAudit(options)).result;
 }
