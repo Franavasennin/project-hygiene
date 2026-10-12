@@ -53,3 +53,76 @@ rules:
     suggests:
       - type: ignore
       - type: review
+
+  - id: AI-DOC-001
+    title: Fichero de instrucciones de agente duplicado
+    why: >
+      Dos ficheros de instrucciones identicos en niveles distintos se
+      desincronizan en cuanto se edita uno. Detectar instrucciones en
+      conflicto es semantico y queda para la capa de IA.
+    severity: low
+    risk: low
+    confidence: 0.7
+    match:
+      all:
+        - is_file: true
+        - basename_regex: '^((CLAUDE|AGENTS|GEMINI)\.md|\.cursorrules|copilot-instructions\.md)$'
+        - sha256_duplicate: true
+    suggests:
+      - type: review
+
+  - id: AI-REPORT-001
+    title: Informe generado que nada referencia
+    why: >
+      Los agentes dejan informes de una sola lectura. Si nada los referencia,
+      suelen ser residuo de una sesion.
+    severity: low
+    risk: low
+    confidence: 0.6
+    match:
+      all:
+        - is_file: true
+        - basename_regex: '(?i)(^|[-_ ])(report|informe|summary)([-_ ][^.]*)?\.(md|html|txt)$'
+        - referenced_by_source: false
+        - none:
+            - glob: "docs/**"
+            - glob: ".tmp/**"
+    suggests:
+      - type: review
+
+  - id: AI-OUTSIDE-001
+    title: Directorio de agente fuera de todo proyecto
+    why: >
+      Un .claude o .cursor en la raiz de un workspace, fuera de cualquier
+      proyecto, suele venir de abrir el agente en la carpeta equivocada.
+    severity: low
+    risk: low
+    confidence: 0.7
+    match:
+      all:
+        - root_is_workspace: true
+        - is_dir: true
+        - in_project: false
+        - none:
+            - depth_gt: 1
+        - basename_regex: '^\.(claude|cursor|aider[^/]*|continue|codex|gemini|windsurf)$'
+    suggests:
+      - type: review
+
+  - id: AI-DUPDOC-001
+    title: Documentacion que duplica el README
+    why: >
+      Un documento casi identico al README del mismo directorio suele ser una
+      version generada que se quedo atras.
+    severity: low
+    risk: medium
+    confidence: 0.6
+    match:
+      all:
+        - is_file: true
+        - glob: "**/*.md"
+        - none:
+            - basename_regex: '(?i)^readme\.md$'
+        - similar_to_readme_gt: 0.8
+    suggests:
+      - type: review
