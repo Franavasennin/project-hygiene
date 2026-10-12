@@ -10,6 +10,8 @@ import { loadPacks } from '../rules/schema.js';
 import { renderReport } from '../report/human.js';
 import { renderPlan } from '../report/plan.js';
 import { resolveHome } from '../core/home.js';
+import { findEntries } from '../executor/manifest.js';
+import { restoreEntry } from '../executor/restore.js';
 import { deleteApprovals, loadApprovals, saveApprovals } from '../approvals/store.js';
 import {
   APPROVABLE_RISKS, mergeApproval, selectOperations, type ApprovableRisk,
@@ -29,6 +31,7 @@ Comandos:
   explain <RULE-ID>      Por que existe una regla
   approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
   clean --approved       Mueve a cuarentena solo lo aprobado
+  restore <OP-ID>        Devuelve un fichero de la cuarentena verificando su hash
 
 Opciones:
   --json                 Salida legible por maquina
@@ -220,6 +223,33 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       }
       print('Para deshacer: hygiene restore <OP-ID>');
       return failed > 0 ? 2 : 0;
+    }
+
+    if (command === 'restore') {
+      if (!target) {
+        print('Falta la operacion: hygiene restore <OP-ID|AAAA-MM-DD/OP-ID>');
+        return 2;
+      }
+      const entries = await findEntries(resolveHome(), target);
+      if (entries.length === 0) {
+        print(`No hay ninguna entrada de cuarentena para ${target}.`);
+        return 2;
+      }
+      if (entries.length > 1) {
+        print(`${target} es ambiguo; hay varias entradas:`);
+        for (const e of entries) print(`  ${e.entry}  ${e.manifest.state}  ${e.manifest.source}`);
+        print('Indica la entrada concreta: hygiene restore <AAAA-MM-DD/OP-ID>');
+        return 2;
+      }
+
+      const outcome = await restoreEntry(entries[0]!);
+      if (outcome.status === 'aborted') {
+        print(`ERROR: ${outcome.reason}. Nothing was modified.`);
+        return 2;
+      }
+      print(`Restaurado: ${outcome.source}`);
+      print(`Hash verificado. Permisos: ${outcome.permissions}`);
+      return 0;
     }
 
     print(`Comando desconocido: ${command}`);

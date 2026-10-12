@@ -138,4 +138,17 @@ describe('main', () => {
     expect(await main(['clean', '--approved', '--root', root], print)).toBe(2);
     expect(salida.join('\n')).toContain('No approved operations');
   });
+
+  it('restore sin referencia devuelve 2', async () => {
+    expect(await main(['restore'], print)).toBe(2);
+  });
+
+  it('restore de una operacion inexistente devuelve 2', async () => {
+    expect(await main(['restore', 'OP-000999'], print)).toBe(2);
+    expect(salida.join('\n')).toContain('No hay ninguna entrada de cuarentena');
+  });
+
+  it('restore rechaza referencias mal formadas', async () => {
+    expect(await main(['restore', '../../etc'], print)).toBe(2);
+  });
 });
