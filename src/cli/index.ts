@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
 import { runPlan } from '../plan.js';
+import { runClean } from '../clean.js';
 import { loadPacks } from '../rules/schema.js';
 import { renderReport } from '../report/human.js';
 import { renderPlan } from '../report/plan.js';
@@ -27,12 +28,14 @@ Comandos:
   plan [ruta]            Operaciones propuestas con ID, sin modificar nada
   explain <RULE-ID>      Por que existe una regla
   approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
+  clean --approved       Mueve a cuarentena solo lo aprobado
 
 Opciones:
   --json                 Salida legible por maquina
   --root <ruta>          Workspace para approve y clean (por defecto, el actual)
   --risk <nivel>         approve: todo lo ejecutable hasta ese riesgo (safe, low, medium, high)
   --reset                approve: descarta las aprobaciones pendientes
+  --approved             clean: confirma que solo se ejecuta lo aprobado
   --help                 Esta ayuda
 
 Entorno:
@@ -72,6 +75,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
         root: { type: 'string' },
         risk: { type: 'string' },
         reset: { type: 'boolean' },
+        approved: { type: 'boolean' },
       },
     });
   } catch (err) {
@@ -182,6 +186,40 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       print(`Registrado en ${file}`);
       print(`Para ejecutar: hygiene clean --approved --root "${root}"`);
       return 0;
+    }
+
+    if (command === 'clean') {
+      if (parsed.values.approved !== true) {
+        print('ERROR: No approved operations. Nothing was modified.');
+        print('clean solo ejecuta lo aprobado: hygiene clean --approved [--root <ruta>]');
+        return 2;
+      }
+      const root = await resolveDir(parsed.values.root, print);
+      if (!root) return 2;
+
+      const result = await runClean({ root, rulesDir: RULES_DIR, home: resolveHome() });
+      if (result.status === 'no-approvals') {
+        print('ERROR: No approved operations. Nothing was modified.');
+        return 2;
+      }
+      if (result.status === 'stale') {
+        print('ERROR: las aprobaciones ya no coinciden con el disco. Nothing was modified.');
+        for (const a of result.stale) print(`  caducada  ${a.id}  ${a.type}  ${a.path}`);
+        print('Vuelve a ejecutar hygiene plan y aprueba de nuevo, o descarta con hygiene approve --reset.');
+        return 2;
+      }
+
+      let failed = 0;
+      for (const o of result.outcomes) {
+        if (o.status === 'quarantined') {
+          print(`  cuarentena  ${o.opId}  ${o.path}  -> ${o.entry}`);
+        } else {
+          if (o.status === 'failed') failed += 1;
+          print(`  ${o.status === 'failed' ? 'fallo' : 'omitida'}  ${o.opId}  ${o.path}  (${o.reason})`);
+        }
+      }
+      print('Para deshacer: hygiene restore <OP-ID>');
+      return failed > 0 ? 2 : 0;
     }
 
     print(`Comando desconocido: ${command}`);

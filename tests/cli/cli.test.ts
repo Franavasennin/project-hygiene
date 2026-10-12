@@ -126,4 +126,16 @@ describe('main', () => {
     expect(await main(['approve', '--reset', '--root', root], print)).toBe(0);
     expect(await readdir(path.join(home, 'approvals'))).toHaveLength(0);
   });
+
+  it('clean sin --approved se niega y no modifica nada', async () => {
+    await logViejo('debug.log');
+    expect(await main(['clean', '--root', root], print)).toBe(2);
+    expect(salida.join('\n')).toContain('ERROR: No approved operations. Nothing was modified.');
+    expect(await readdir(root)).toEqual(['debug.log']);
+  });
+
+  it('clean --approved sin aprobaciones devuelve 2', async () => {
+    expect(await main(['clean', '--approved', '--root', root], print)).toBe(2);
+    expect(salida.join('\n')).toContain('No approved operations');
+  });
 });
