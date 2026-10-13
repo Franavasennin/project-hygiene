@@ -14,6 +14,7 @@ import { renderPlan } from '../report/plan.js';
 import { resolveHome } from '../core/home.js';
 import { findEntries } from '../executor/manifest.js';
 import { restoreEntry } from '../executor/restore.js';
+import { runInit } from '../init/run.js';
 import { deleteApprovals, loadApprovals, saveApprovals } from '../approvals/store.js';
 import {
   APPROVABLE_RISKS, mergeApproval, selectOperations, type ApprovableRisk,
@@ -36,6 +37,7 @@ Comandos:
   approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
   clean --approved       Ejecuta lo aprobado: cuarentena e ignore
   restore <OP-ID>        Devuelve un fichero de la cuarentena verificando su hash
+  init [ruta]            Modo prevencion: .gitignore, .tmp/, rc, reglas para agentes (--ci: workflow)
 
 Opciones:
   --json                 Salida legible por maquina
@@ -97,6 +99,7 @@ export async function main(argv: string[], print: Printer = console.log): Promis
         approved: { type: 'boolean' },
         axis: { type: 'string' },
         'fail-on': { type: 'string' },
+        ci: { type: 'boolean' },
       },
     });
   } catch (err) {
@@ -286,6 +289,18 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       }
       print(`Restaurado: ${outcome.source}`);
       print(`Hash verificado. Permisos: ${outcome.permissions}`);
+      return 0;
+    }
+
+    if (command === 'init') {
+      const root = await resolveDir(target, print);
+      if (!root) return 2;
+      const actions = await runInit({ root, home: resolveHome(), ci: parsed.values.ci === true });
+      for (const a of actions) {
+        const extra = a.reason ? `  (${a.reason})` : a.entry ? `  -> ${a.entry}` : '';
+        print(`  ${a.status.padEnd(9)} ${a.file}${extra}`);
+      }
+      print('Para deshacer un cambio: hygiene restore <AAAA-MM-DD/INIT-NNNNNN>');
       return 0;
     }
 

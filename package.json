@@ -6,7 +6,7 @@
   "type": "module",
   "bin": { "hygiene": "./dist/cli/index.js" },
   "engines": { "node": ">=20" },
-  "files": ["dist", "rules"],
+  "files": ["dist", "rules", "templates"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",

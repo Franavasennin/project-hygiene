@@ -1,0 +1,8 @@
+# Configuracion de project-hygiene. Todas las claves son opcionales.
+planner:
+  min_confidence: 0.8
+loop:
+  max_iterations: 10
+  stop_if_no_improvement: true
+  stop_on_regression: true
+  require_approval_for_risk: [medium, high, unknown]
