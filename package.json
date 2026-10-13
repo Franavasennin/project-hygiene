@@ -4,7 +4,7 @@
   "description": "Audits and organizes software projects and AI-assisted development environments.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": { "hygiene": "./dist/cli/index.js" },
+  "bin": { "hygiene": "dist/cli/index.js" },
   "engines": { "node": ">=20" },
   "files": ["dist", "rules", "templates"],
   "scripts": {
