@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
+import type { Axis, Severity } from '../core/types.js';
 import { loadConfig, type HygieneConfig } from '../config/load.js';
 import { runPlan } from '../plan.js';
 import { runClean } from '../clean.js';
@@ -22,6 +23,8 @@ export type Printer = (line: string) => void;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RULES_DIR = path.resolve(HERE, '..', '..', 'rules');
+const AXES: Axis[] = ['filesystem', 'git', 'security', 'ai'];
+const SEVERITIES: Severity[] = ['info', 'low', 'medium', 'high', 'critical'];
 
 const USAGE = `hygiene <comando> [ruta] [opciones]
 
@@ -40,6 +43,8 @@ Opciones:
   --risk <nivel>         approve: todo lo ejecutable hasta ese riesgo (safe, low, medium, high)
   --reset                approve: descarta las aprobaciones pendientes
   --approved             clean: confirma que solo se ejecuta lo aprobado
+  --axis <eje>           audit: solo un eje (filesystem, git, security, ai)
+  --fail-on <severidad>  audit: sale con 1 si hay hallazgos de esa severidad o mayor
   --help                 Esta ayuda
 
 Entorno:
@@ -90,6 +95,8 @@ export async function main(argv: string[], print: Printer = console.log): Promis
         risk: { type: 'string' },
         reset: { type: 'boolean' },
         approved: { type: 'boolean' },
+        axis: { type: 'string' },
+        'fail-on': { type: 'string' },
       },
     });
   } catch (err) {
@@ -139,7 +146,21 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       const root = await resolveDir(target, print);
       if (!root) return 2;
 
-      const result = await runAudit(engineOptions(root, await loadConfig(root)));
+      const axis = parsed.values.axis;
+      if (axis !== undefined && !(AXES as string[]).includes(axis)) {
+        print(`--axis no valido: ${axis}. Valores: ${AXES.join(', ')}`);
+        return 2;
+      }
+      const failOn = parsed.values['fail-on'];
+      if (failOn !== undefined && !(SEVERITIES as string[]).includes(failOn)) {
+        print(`--fail-on no valido: ${failOn}. Valores: ${SEVERITIES.join(', ')}`);
+        return 2;
+      }
+
+      const result = await runAudit({
+        ...engineOptions(root, await loadConfig(root)),
+        axes: axis ? [axis as Axis] : undefined,
+      });
 
       if (command === 'scan') {
         print(JSON.stringify(result.inventory, replacer, 2));
@@ -147,6 +168,10 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       }
 
       print(json ? JSON.stringify(result, replacer, 2) : renderReport(result));
+      if (failOn !== undefined) {
+        const threshold = SEVERITIES.indexOf(failOn as Severity);
+        return result.findings.some((f) => SEVERITIES.indexOf(f.severity) >= threshold) ? 1 : 0;
+      }
       return result.score.clean ? 0 : 1;
     }
 

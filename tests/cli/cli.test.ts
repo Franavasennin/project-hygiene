@@ -166,4 +166,24 @@ describe('main', () => {
   it('restore rechaza referencias mal formadas', async () => {
     expect(await main(['restore', '../../etc'], print)).toBe(2);
   });
+  it('audit --axis security solo evalua el eje de seguridad', async () => {
+    await writeFile(path.join(root, 'notas-final.md'), 'x');
+    await writeFile(path.join(root, 'server.crt'), 'x');
+    expect(await main(['audit', root, '--json', '--axis', 'security'], print)).toBe(0);
+    const r = JSON.parse(salida.join('\n')) as { findings: { axis: string }[] };
+    expect(r.findings.length).toBeGreaterThan(0);
+    expect(r.findings.every((f) => f.axis === 'security')).toBe(true);
+  });
+
+  it('--fail-on high devuelve 1 solo si hay un hallazgo de esa severidad o mayor', async () => {
+    await writeFile(path.join(root, 'server.crt'), 'x');
+    expect(await main(['audit', root, '--axis', 'security', '--fail-on', 'high'], print)).toBe(0);
+    await writeFile(path.join(root, 'id_rsa'), '-----BEGIN RSA PRIVATE KEY-----');
+    expect(await main(['audit', root, '--axis', 'security', '--fail-on', 'high'], print)).toBe(1);
+  });
+
+  it('un eje o una severidad invalidos devuelven 2', async () => {
+    expect(await main(['audit', root, '--axis', 'red'], print)).toBe(2);
+    expect(await main(['audit', root, '--fail-on', 'grave'], print)).toBe(2);
+  });
 });
