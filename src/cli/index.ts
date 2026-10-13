@@ -15,6 +15,7 @@ import { resolveHome } from '../core/home.js';
 import { findEntries } from '../executor/manifest.js';
 import { restoreEntry } from '../executor/restore.js';
 import { runInit } from '../init/run.js';
+import { runLoop } from '../loop.js';
 import { deleteApprovals, loadApprovals, saveApprovals } from '../approvals/store.js';
 import {
   APPROVABLE_RISKS, mergeApproval, selectOperations, type ApprovableRisk,
@@ -38,6 +39,7 @@ Comandos:
   clean --approved       Ejecuta lo aprobado: cuarentena e ignore
   restore <OP-ID>        Devuelve un fichero de la cuarentena verificando su hash
   init [ruta]            Modo prevencion: .gitignore, .tmp/, rc, reglas para agentes (--ci: workflow)
+  loop [--root <ruta>]   Ciclo acotado: aprueba por politica, limpia y reaudita
 
 Opciones:
   --json                 Salida legible por maquina
@@ -302,6 +304,18 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       }
       print('Para deshacer un cambio: hygiene restore <AAAA-MM-DD/INIT-NNNNNN>');
       return 0;
+    }
+
+    if (command === 'loop') {
+      const root = await resolveDir(parsed.values.root, print);
+      if (!root) return 2;
+      const r = await runLoop({ root, rulesDir: RULES_DIR, home: resolveHome(), config: await loadConfig(root) });
+      for (const it of r.iterations) {
+        print(`  iteracion ${it.n}  ${it.scoreBefore} -> ${it.scoreAfter}  ejecutadas ${it.executed}`);
+      }
+      print(`Puntuacion ${r.scoreInitial} -> ${r.scoreFinal}. Parada: ${r.stop}.`);
+      print('Para deshacer: hygiene restore <OP-ID>');
+      return r.stop === 'failed' || r.stop === 'stale' ? 2 : 0;
     }
 
     print(`Comando desconocido: ${command}`);
