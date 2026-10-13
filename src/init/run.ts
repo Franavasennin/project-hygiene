@@ -1,6 +1,6 @@
 import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { applyEdit, type EditOutcome } from '../executor/edit.js';
+import { applyEdit, readTextOrNull, type EditOutcome } from '../executor/edit.js';
 import { replaceBlock } from './blocks.js';
 import { detectTech, readTemplate } from './templates.js';
 
@@ -90,6 +90,27 @@ export async function runInit(o: InitOptions): Promise<InitAction[]> {
     await edit(agentFile, (cur) => replaceBlock(cur, '<!-- >>> hygiene -->', '<!-- <<< hygiene -->', agents));
   } else {
     actions.push({ file: 'CLAUDE.md', status: 'skipped', reason: 'no hay fichero de instrucciones de agente; no se crea uno nuevo' });
+  }
+
+  // 5. Hook de pre-commit, solo en un repo y sin pisar uno ajeno.
+  const hookFile = '.git/hooks/pre-commit';
+  if (!(await isDir(path.join(o.root, '.git')))) {
+    actions.push({ file: hookFile, status: 'skipped', reason: 'no es un repositorio git' });
+  } else {
+    const hookBody = await readTemplate('pre-commit.sh');
+    const hookAbs = path.join(o.root, '.git', 'hooks', 'pre-commit');
+    const foreign = (await isFile(hookAbs)) && !(await readTextOrNull(hookAbs))?.includes('# >>> hygiene');
+    if (foreign) {
+      actions.push({ file: hookFile, status: 'skipped', reason: 'ya existe un hook pre-commit ajeno; no se toca' });
+    } else {
+      await edit(hookFile, (cur) => replaceBlock(cur ?? '#!/bin/sh\n', '# >>> hygiene', '# <<< hygiene', hookBody), 0o755);
+    }
+  }
+
+  // 6. Workflow de CI opcional.
+  if (o.ci) {
+    const ci = await readTemplate('ci-hygiene.yml');
+    await edit('.github/workflows/hygiene.yml', (cur) => cur ?? ci);
   }
 
   return actions;
