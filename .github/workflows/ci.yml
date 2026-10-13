@@ -28,3 +28,5 @@ jobs:
       # el codigo real del proyecto. Sin listas de exclusion propias sobre
       # el codigo que SI se audita.
       - run: npm run dogfood
+      # spec §18: el paquete se instala y funciona (dist, rules y templates).
+      - run: npm run pack-smoke

@@ -6,6 +6,8 @@ import {
   approvalKey, deleteApprovals, loadApprovals, type ApprovedOperation,
 } from './approvals/store.js';
 import { quarantineOne, type QuarantineOutcome } from './executor/quarantine.js';
+import { ignoreOne } from './executor/ignore.js';
+import type { EditOutcome } from './executor/edit.js';
 
 export interface CleanOptions {
   root: string;
@@ -17,10 +19,12 @@ export interface CleanOptions {
   now?: Date;
 }
 
+export type ExecOutcome = QuarantineOutcome | EditOutcome;
+
 export type CleanResult =
   | { status: 'no-approvals' }
   | { status: 'stale'; stale: ApprovedOperation[] }
-  | { status: 'executed'; outcomes: QuarantineOutcome[] };
+  | { status: 'executed'; outcomes: ExecOutcome[] };
 
 /** Barrera final (spec §9): solo se ejecuta lo registrado como aprobado. */
 export async function runClean(o: CleanOptions): Promise<CleanResult> {
@@ -49,10 +53,21 @@ export async function runClean(o: CleanOptions): Promise<CleanResult> {
   }
   if (stale.length > 0) return { status: 'stale', stale };
 
-  const outcomes: QuarantineOutcome[] = [];
+  const outcomes: ExecOutcome[] = [];
+  // Varias operaciones ignore pueden editar el mismo .gitignore en este
+  // clean: cada una espera la huella que dejo la anterior, no la aprobada.
+  const fingerprints = new Map<string, string>();
   for (const op of matched) {
     try {
-      outcomes.push(await quarantineOne({ root: o.root, home: o.home, op, now: o.now }));
+      if (op.type === 'ignore' && op.edit) {
+        const r = await ignoreOne({
+          root: o.root, home: o.home, op, now: o.now, expectedBefore: fingerprints.get(op.edit.file),
+        });
+        if (r.status === 'applied') fingerprints.set(op.edit.file, r.after);
+        outcomes.push(r);
+      } else {
+        outcomes.push(await quarantineOne({ root: o.root, home: o.home, op, now: o.now }));
+      }
     } catch (err) {
       outcomes.push({
         status: 'failed', opId: op.id, path: op.path,

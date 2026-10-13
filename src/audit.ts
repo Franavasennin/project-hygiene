@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import type { AuditResult, FileEntry, Inventory, ProjectCandidate } from './core/types.js';
+import type { Axis, AuditResult, FileEntry, Inventory, ProjectCandidate } from './core/types.js';
 import { Budget, DEFAULT_LIMITS, type Limits } from './core/limits.js';
 import { detectProjects } from './detector/detect.js';
 import { walk } from './collectors/filesystem.js';
@@ -17,6 +17,8 @@ export interface AuditOptions {
   limits?: Partial<Limits>;
   /** Rama por defecto configurada (`git.default_branch`). */
   defaultBranch?: string;
+  /** Solo se cargan los packs de estos ejes. */
+  axes?: Axis[];
 }
 
 export interface AuditFacts {
@@ -188,7 +190,8 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
     };
   };
 
-  const packs = await loadPacks(options.rulesDir);
+  const packs = (await loadPacks(options.rulesDir))
+    .filter((p) => !options.axes || options.axes.includes(p.axis));
   const projectEntries = projects
     .map((c) => byPath.get(c.path))
     .filter((e): e is FileEntry => e !== undefined);

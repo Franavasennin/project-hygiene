@@ -6,12 +6,13 @@
   "type": "module",
   "bin": { "hygiene": "./dist/cli/index.js" },
   "engines": { "node": ">=20" },
-  "files": ["dist", "rules"],
+  "files": ["dist", "rules", "templates"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "dogfood": "node dist/cli/index.js audit src && node dist/cli/index.js audit rules"
+    "dogfood": "node dist/cli/index.js audit src && node dist/cli/index.js audit rules",
+    "pack-smoke": "node scripts/pack-smoke.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",

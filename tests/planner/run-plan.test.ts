@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -35,6 +37,16 @@ describe('runPlan', () => {
     const op = plan.operations.find((o) => o.path === 'debug.log');
     expect(op?.type).toBe('review');
     expect(op?.degradeReason).toBe('referenced-by-source');
+  });
+
+  it('propone ignore para un node_modules sin ignorar en un repo', async () => {
+    await promisify(execFile)('git', ['init', '-q', '-b', 'main'], { cwd: root });
+    await mkdir(path.join(root, 'node_modules'));
+    await writeFile(path.join(root, 'node_modules', 'a.js'), 'x');
+    const { plan } = await runPlan({ root, rulesDir: RULES });
+    expect(plan.operations.find((o) => o.path === 'node_modules')).toMatchObject({
+      type: 'ignore', edit: { file: '.gitignore', line: '/node_modules/' }, source: { sha256: 'absent' },
+    });
   });
 
   it('el mismo estado de disco produce el mismo plan', async () => {

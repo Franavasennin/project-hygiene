@@ -2,11 +2,8 @@ import type {
   DegradeReason, FileEntry, Finding, Inventory, Operation, OperationType, Risk,
 } from '../core/types.js';
 
-/**
- * Tipos que el executor sabe aplicar en esta version. El resto se planifica
- * y se muestra, pero approve lo rechaza: ignore/move/create llegan con init.
- */
-export const EXECUTABLE_TYPES: ReadonlySet<OperationType> = new Set<OperationType>(['quarantine']);
+/** Tipos que el executor sabe aplicar. create solo lo hace init; move no lo propone ninguna regla. */
+export const EXECUTABLE_TYPES: ReadonlySet<OperationType> = new Set<OperationType>(['quarantine', 'ignore']);
 
 export interface PlannerPolicy {
   /** Por debajo de esta confianza toda operacion se degrada a review. */
@@ -14,6 +11,15 @@ export interface PlannerPolicy {
 }
 
 export const DEFAULT_POLICY: PlannerPolicy = { minConfidence: 0.8 };
+
+export interface IgnoreTarget {
+  file: string;
+  line: string;
+  /** Huella del .gitignore al planificar, o 'absent'. */
+  fingerprint: string;
+  /** La ruta, o algo debajo de ella, ya esta versionado. */
+  tracked: boolean;
+}
 
 export interface PlannerInput {
   findings: Finding[];
@@ -23,6 +29,8 @@ export interface PlannerInput {
   /** sha256 de los candidatos a cuarentena; null si no se pudo calcular. */
   hashes: Map<string, string | null>;
   policy: PlannerPolicy;
+  /** Destino de cada candidato a ignore; null si no esta en un repo git. */
+  ignoreTargets?: Map<string, IgnoreTarget | null>;
 }
 
 interface Resolution {
@@ -64,6 +72,11 @@ function resolve(f: Finding, input: PlannerInput, byPath: Map<string, FileEntry>
     if (input.referenced.has(f.path)) return degrade('referenced-by-source');
     if (!input.referencesComplete) return degrade('references-undetermined');
     if (!input.hashes.get(f.path)) return degrade('hash-unavailable');
+  }
+  if (primary === 'ignore') {
+    const target = input.ignoreTargets?.get(f.path);
+    if (!target) return degrade('not-in-git-repo');
+    if (target.tracked) return degrade('tracked-ignore-ineffective');
   }
   return { type: primary, degradedFrom: null, degradeReason: null };
 }
@@ -109,6 +122,7 @@ export function planOperations(input: PlannerInput): Operation[] {
     if (r.type === 'none') continue;
     const risk = group.reduce<Risk>(
       (acc, f) => (RISK_RANK[f.risk] > RISK_RANK[acc] ? f.risk : acc), 'safe');
+    const target = r.type === 'ignore' ? input.ignoreTargets?.get(p) ?? null : null;
     ops.push({
       id: `OP-${String(ops.length + 1).padStart(6, '0')}`,
       type: r.type,
@@ -119,7 +133,10 @@ export function planOperations(input: PlannerInput): Operation[] {
       reason: [...new Set(group.map((f) => f.reason))].join('; '),
       degradedFrom: r.degradedFrom,
       degradeReason: r.degradeReason,
-      source: { sha256: input.hashes.get(p) ?? null, size: byPath.get(p)?.size ?? 0 },
+      source: target
+        ? { sha256: target.fingerprint, size: 0 }
+        : { sha256: input.hashes.get(p) ?? null, size: byPath.get(p)?.size ?? 0 },
+      ...(target ? { edit: { file: target.file, line: target.line } } : {}),
     });
   }
   return ops;

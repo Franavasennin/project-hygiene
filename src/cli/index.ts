@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
+import type { Axis, Severity } from '../core/types.js';
 import { loadConfig, type HygieneConfig } from '../config/load.js';
 import { runPlan } from '../plan.js';
 import { runClean } from '../clean.js';
@@ -13,6 +15,8 @@ import { renderPlan } from '../report/plan.js';
 import { resolveHome } from '../core/home.js';
 import { findEntries } from '../executor/manifest.js';
 import { restoreEntry } from '../executor/restore.js';
+import { runInit } from '../init/run.js';
+import { runLoop } from '../loop.js';
 import { deleteApprovals, loadApprovals, saveApprovals } from '../approvals/store.js';
 import {
   APPROVABLE_RISKS, mergeApproval, selectOperations, type ApprovableRisk,
@@ -22,6 +26,8 @@ export type Printer = (line: string) => void;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RULES_DIR = path.resolve(HERE, '..', '..', 'rules');
+const AXES: Axis[] = ['filesystem', 'git', 'security', 'ai'];
+const SEVERITIES: Severity[] = ['info', 'low', 'medium', 'high', 'critical'];
 
 const USAGE = `hygiene <comando> [ruta] [opciones]
 
@@ -31,8 +37,10 @@ Comandos:
   plan [ruta]            Operaciones propuestas con ID, sin modificar nada
   explain <RULE-ID>      Por que existe una regla
   approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
-  clean --approved       Mueve a cuarentena solo lo aprobado
+  clean --approved       Ejecuta lo aprobado: cuarentena e ignore
   restore <OP-ID>        Devuelve un fichero de la cuarentena verificando su hash
+  init [ruta]            Modo prevencion: .gitignore, .tmp/, rc, reglas para agentes (--ci: workflow)
+  loop [--root <ruta>]   Ciclo acotado: aprueba por politica, limpia y reaudita
 
 Opciones:
   --json                 Salida legible por maquina
@@ -40,6 +48,8 @@ Opciones:
   --risk <nivel>         approve: todo lo ejecutable hasta ese riesgo (safe, low, medium, high)
   --reset                approve: descarta las aprobaciones pendientes
   --approved             clean: confirma que solo se ejecuta lo aprobado
+  --axis <eje>           audit: solo un eje (filesystem, git, security, ai)
+  --fail-on <severidad>  audit: sale con 1 si hay hallazgos de esa severidad o mayor
   --help                 Esta ayuda
 
 Entorno:
@@ -90,6 +100,9 @@ export async function main(argv: string[], print: Printer = console.log): Promis
         risk: { type: 'string' },
         reset: { type: 'boolean' },
         approved: { type: 'boolean' },
+        axis: { type: 'string' },
+        'fail-on': { type: 'string' },
+        ci: { type: 'boolean' },
       },
     });
   } catch (err) {
@@ -139,7 +152,21 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       const root = await resolveDir(target, print);
       if (!root) return 2;
 
-      const result = await runAudit(engineOptions(root, await loadConfig(root)));
+      const axis = parsed.values.axis;
+      if (axis !== undefined && !(AXES as string[]).includes(axis)) {
+        print(`--axis no valido: ${axis}. Valores: ${AXES.join(', ')}`);
+        return 2;
+      }
+      const failOn = parsed.values['fail-on'];
+      if (failOn !== undefined && !(SEVERITIES as string[]).includes(failOn)) {
+        print(`--fail-on no valido: ${failOn}. Valores: ${SEVERITIES.join(', ')}`);
+        return 2;
+      }
+
+      const result = await runAudit({
+        ...engineOptions(root, await loadConfig(root)),
+        axes: axis ? [axis as Axis] : undefined,
+      });
 
       if (command === 'scan') {
         print(JSON.stringify(result.inventory, replacer, 2));
@@ -147,6 +174,10 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       }
 
       print(json ? JSON.stringify(result, replacer, 2) : renderReport(result));
+      if (failOn !== undefined) {
+        const threshold = SEVERITIES.indexOf(failOn as Severity);
+        return result.findings.some((f) => SEVERITIES.indexOf(f.severity) >= threshold) ? 1 : 0;
+      }
       return result.score.clean ? 0 : 1;
     }
 
@@ -225,9 +256,10 @@ export async function main(argv: string[], print: Printer = console.log): Promis
 
       let failed = 0;
       for (const o of result.outcomes) {
-        if (o.status === 'quarantined') {
-          print(`  cuarentena  ${o.opId}  ${o.path}  -> ${o.entry}`);
-        } else {
+        if (o.status === 'quarantined') print(`  cuarentena  ${o.opId}  ${o.path}  -> ${o.entry}`);
+        else if (o.status === 'applied') print(`  ignorado    ${o.opId}  ${o.path}  -> ${o.entry}`);
+        else if (o.status === 'unchanged') print(`  sin cambios ${o.opId}  ${o.path}`);
+        else {
           if (o.status === 'failed') failed += 1;
           print(`  ${o.status === 'failed' ? 'fallo' : 'omitida'}  ${o.opId}  ${o.path}  (${o.reason})`);
         }
@@ -263,6 +295,30 @@ export async function main(argv: string[], print: Printer = console.log): Promis
       return 0;
     }
 
+    if (command === 'init') {
+      const root = await resolveDir(target, print);
+      if (!root) return 2;
+      const actions = await runInit({ root, home: resolveHome(), ci: parsed.values.ci === true });
+      for (const a of actions) {
+        const extra = a.reason ? `  (${a.reason})` : a.entry ? `  -> ${a.entry}` : '';
+        print(`  ${a.status.padEnd(9)} ${a.file}${extra}`);
+      }
+      print('Para deshacer un cambio: hygiene restore <AAAA-MM-DD/INIT-NNNNNN>');
+      return 0;
+    }
+
+    if (command === 'loop') {
+      const root = await resolveDir(parsed.values.root, print);
+      if (!root) return 2;
+      const r = await runLoop({ root, rulesDir: RULES_DIR, home: resolveHome(), config: await loadConfig(root) });
+      for (const it of r.iterations) {
+        print(`  iteracion ${it.n}  ${it.scoreBefore} -> ${it.scoreAfter}  ejecutadas ${it.executed}`);
+      }
+      print(`Puntuacion ${r.scoreInitial} -> ${r.scoreFinal}. Parada: ${r.stop}.`);
+      print('Para deshacer: hygiene restore <OP-ID>');
+      return r.stop === 'failed' || r.stop === 'stale' ? 2 : 0;
+    }
+
     print(`Comando desconocido: ${command}`);
     print('');
     print(USAGE);
@@ -273,10 +329,24 @@ export async function main(argv: string[], print: Printer = console.log): Promis
   }
 }
 
-const invocadoDirectamente = process.argv[1]
-  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function realOrResolved(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
 
-if (invocadoDirectamente) {
+/**
+ * Node carga el modulo por su ruta real, pero argv[1] conserva el enlace
+ * (node_modules/.bin/hygiene, o /var -> /private/var en macOS). Se comparan
+ * rutas reales; si no, el binario instalado no ejecutaria nada.
+ */
+export function invokedDirectly(argv1: string | undefined, moduleFile: string): boolean {
+  return argv1 !== undefined && realOrResolved(argv1) === realOrResolved(moduleFile);
+}
+
+if (invokedDirectly(process.argv[1], fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },
     (err) => {

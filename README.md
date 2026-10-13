@@ -76,6 +76,28 @@ dentro del workspace auditado.
 En esta versión solo se ejecutan operaciones `quarantine`, y solo sobre ficheros
 regulares que nada referencia. Todo lo demás se propone como `review`.
 
+### Prevención y ciclo
+
+```bash
+node dist/cli/index.js init .          # .gitignore, .tmp/, rc, reglas para agentes, hook
+node dist/cli/index.js init . --ci     # además, workflow de auditoría
+node dist/cli/index.js loop --root .   # aprueba por política, limpia y reaudita
+node dist/cli/index.js audit . --axis security --fail-on high
+```
+
+`init` es idempotente y no pisa nada ajeno: los bloques gestionados van entre
+marcadores y cada cambio se deshace con `hygiene restore <fecha>/INIT-NNNNNN`.
+`loop` registra como aprobaciones concretas lo que su política aprueba
+(`loop.require_approval_for_risk`, por defecto `medium`, `high` y `unknown`
+exigen aprobación explícita) y para en cuanto la puntuación no mejora.
+
+### Configuración
+
+`.hygienerc.yml` en la raíz auditada, con precedencia sobre
+`~/.config/hygiene/config.yml`. Claves: `engine` (límites del motor),
+`planner.min_confidence`, `git.default_branch` y `loop`. Una clave
+desconocida es un error, no un aviso.
+
 ## Qué audita hoy
 
 Cuatro ejes: sistema de ficheros y límites de proyecto, higiene de Git, secretos
@@ -100,31 +122,14 @@ audita bien a sí misma.
 
 ## Estado
 
-Segunda de tres entregas planeadas.
+v1 completa en tres entregas: núcleo de solo lectura; planner, aprobación y
+cuarentena reversible; y ejes completos con prevención (`init`) y ciclo
+(`loop`). `clean` ejecuta cuarentenas e `ignore`; `create` solo lo hace
+`init`.
 
-**Primera entrega (núcleo de solo lectura):** detección de proyectos, los tres
-collectors, motor de reglas con límites de ejecución, scorer, los cuatro packs
-de reglas y los comandos `scan`, `audit` y `explain`.
-
-**Segunda entrega (cuarentena reversible):** planner, aprobación por operación,
-executor, cuarentena fuera del workspace con manifiesto, `restore` con
-verificación de hash y permisos por plataforma, y los comandos `plan`,
-`approve`, `clean --approved` y `restore`.
-
-- La búsqueda de referencias también cuenta como incompleta si un directorio no
-  se puede leer o un fichero fuente es un enlace simbólico; ambos casos bloquean
-  la cuarentena.
-- `entropy_gt` parte los tokens en los caracteres fuera del alfabeto
-  base64/hex, lo que elimina falsos positivos en expresiones de código densas.
-
-Lo que **no** incluye todavía:
-
-- **`init`, `loop` y plantillas para nuevos proyectos.** Tercera entrega.
-- **Ejecución de `ignore`, `move` y `create`.** Se proponen pero no se aprueban
-  hasta que llegue `init`.
-- **Reglas de nivel proyecto y workspace** (`FS-ROOT-001`, `GIT-NOREPO-001`,
-  `AI-DOC-001` y otras). Necesitan un evaluador de ámbito de proyecto.
-- **El predicado `in_git_history`** y con él `SEC-HIST-001`.
+Pendiente fuera de la v1: publicación en npm, `.hygienerc.yml` por
+subproyecto, detección de instrucciones de agente en conflicto, y los packs y
+salidas de la v2 (dependencias, documentación, tests, CI, HTML, SARIF).
 
 ## Reglas disponibles
 
