@@ -1,6 +1,6 @@
 // Prueba de empaquetado: npm pack, instalacion limpia y uso real del binario.
 // Comprueba que dist, rules y templates viajan en el paquete (spec §18).
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,11 @@ const npm = (args, cwd) => execFileSync(win ? 'npm.cmd' : 'npm', args, { cwd, en
 const work = mkdtempSync(path.join(tmpdir(), 'hyg-pack-'));
 const home = mkdtempSync(path.join(tmpdir(), 'hyg-pack-home-'));
 try {
+  // npm publish normaliza package.json y puede quitar campos (p. ej. un bin con
+  // "./") que npm pack deja intactos: el paquete publicado no tendria binario.
+  const dry = spawnSync(win ? 'npm.cmd' : 'npm', ['publish', '--dry-run'], { encoding: 'utf8', shell: win });
+  if (/auto-corrected/.test(dry.stderr)) throw new Error(`npm publish corregiria package.json:\n${dry.stderr}`);
+
   // npm 11 emite un objeto indexado por nombre; versiones anteriores, un array.
   const packed = JSON.parse(npm(['pack', '--json', '--pack-destination', work], process.cwd()));
   const { filename } = Array.isArray(packed) ? packed[0] : Object.values(packed)[0];
