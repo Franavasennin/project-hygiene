@@ -16,6 +16,7 @@ export function renderPlan(plan: Plan): string {
     if (op.degradedFrom && op.degradeReason) {
       out.push(`             degradada desde ${op.degradedFrom}: ${op.degradeReason}`);
     }
+    if (op.edit) out.push(`             anade "${op.edit.line}" a ${op.edit.file}`);
   }
 
   const approvable = plan.operations.filter((o) => EXECUTABLE_TYPES.has(o.type)).map((o) => o.id);

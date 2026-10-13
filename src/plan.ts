@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { AuditResult, Operation, Plan } from './core/types.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { AuditResult, FileEntry, Inventory, Operation, Plan } from './core/types.js';
+import { gitKeyFor } from './collectors/workspace.js';
+import { fingerprintText } from './executor/edit.js';
 import { ENGINE_VERSION } from './core/version.js';
 import { collectAudit, type AuditOptions } from './audit.js';
-import { planOperations, DEFAULT_POLICY, type PlannerPolicy } from './planner/plan.js';
+import { planOperations, DEFAULT_POLICY, type IgnoreTarget, type PlannerPolicy } from './planner/plan.js';
 
 export interface PlanOptions extends AuditOptions {
   minConfidence?: number;
@@ -23,6 +27,27 @@ export function planDigest(root: string, operations: Operation[]): string {
 }
 
 /**
+ * Destino de un ignore (decision 9): el .gitignore del proyecto git que
+ * contiene la ruta, siempre dentro del workspace auditado.
+ */
+async function ignoreTargetFor(inv: Inventory, byPath: Map<string, FileEntry>, p: string): Promise<IgnoreTarget | null> {
+  const key = gitKeyFor(inv.gitByProject, p);
+  if (key === null) return null;
+  const g = inv.gitByProject[key]!;
+  const rel = key === '.' ? p : p.slice(key.length + 1);
+  const file = key === '.' ? '.gitignore' : `${key}/.gitignore`;
+  const isDir = byPath.get(p)?.isDir ?? false;
+  const tracked = g.trackedFiles.has(p) || [...g.trackedFiles].some((t) => t.startsWith(`${p}/`));
+  let current: string | null = null;
+  try {
+    current = await readFile(path.join(inv.root, file), 'utf8');
+  } catch {
+    current = null;
+  }
+  return { file, line: `/${rel}${isDir ? '/' : ''}`, fingerprint: fingerprintText(current), tracked };
+}
+
+/**
  * Read-only por contrato (NN-4): audita, calcula las huellas de los
  * candidatos a cuarentena y propone. No escribe un solo byte.
  */
@@ -39,6 +64,12 @@ export async function runPlan(options: PlanOptions): Promise<PlanRun> {
       : null);
   }
 
+  const ignoreTargets = new Map<string, IgnoreTarget | null>();
+  for (const f of result.findings) {
+    if (f.suggests[0] !== 'ignore' || ignoreTargets.has(f.path)) continue;
+    ignoreTargets.set(f.path, await ignoreTargetFor(result.inventory, byPath, f.path));
+  }
+
   const policy: PlannerPolicy = {
     ...DEFAULT_POLICY,
     ...(options.minConfidence === undefined ? {} : { minConfidence: options.minConfidence }),
@@ -50,6 +81,7 @@ export async function runPlan(options: PlanOptions): Promise<PlanRun> {
     referencesComplete: facts.referencesComplete,
     hashes,
     policy,
+    ignoreTargets,
   });
 
   return {

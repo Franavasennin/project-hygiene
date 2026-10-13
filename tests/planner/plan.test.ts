@@ -145,8 +145,33 @@ describe('planOperations', () => {
     expect(dos).toEqual(uno);
   });
 
-  it('solo quarantine es ejecutable en esta version', () => {
-    expect([...EXECUTABLE_TYPES]).toEqual(['quarantine']);
+  it('quarantine e ignore son ejecutables; create y move no', () => {
+    expect([...EXECUTABLE_TYPES].sort()).toEqual(['ignore', 'quarantine']);
+  });
+
+  it('ignore lleva destino, linea y la huella del .gitignore', () => {
+    const f = hallazgo('node_modules', { ruleId: 'FS-GENERATED-001', suggests: ['ignore', 'review'] });
+    const input = entradaPlanner([f], {
+      ignoreTargets: new Map([['node_modules', { file: '.gitignore', line: '/node_modules/', fingerprint: 'absent', tracked: false }]]),
+    });
+    input.inventory.files = [entrada('node_modules', { isDir: true })];
+    expect(planOperations(input)[0]).toMatchObject({
+      type: 'ignore', edit: { file: '.gitignore', line: '/node_modules/' }, source: { sha256: 'absent' },
+    });
+  });
+
+  it('ignore fuera de un repo git se degrada a review', () => {
+    const f = hallazgo('x', { suggests: ['ignore'] });
+    expect(planOperations(entradaPlanner([f], { ignoreTargets: new Map([['x', null]]) }))[0])
+      .toMatchObject({ type: 'review', degradeReason: 'not-in-git-repo' });
+  });
+
+  it('ignorar algo ya versionado no sirve y se degrada a review', () => {
+    const f = hallazgo('x', { suggests: ['ignore'] });
+    const input = entradaPlanner([f], {
+      ignoreTargets: new Map([['x', { file: '.gitignore', line: '/x', fingerprint: 'absent', tracked: true }]]),
+    });
+    expect(planOperations(input)[0]).toMatchObject({ type: 'review', degradeReason: 'tracked-ignore-ineffective' });
   });
 });
 

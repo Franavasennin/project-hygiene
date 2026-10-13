@@ -114,7 +114,9 @@ export type DegradeReason =
   | 'referenced-by-source'
   | 'references-undetermined'
   | 'hash-unavailable'
-  | 'conflicting-suggestions';
+  | 'conflicting-suggestions'
+  | 'not-in-git-repo'
+  | 'tracked-ignore-ineffective';
 
 export interface Operation {
   /** Estable dentro del plan: mismo estado de disco, mismo ID. */
@@ -129,6 +131,8 @@ export interface Operation {
   degradeReason: DegradeReason | null;
   /** Huella del origen al planificar; el executor la revalida antes de mover. */
   source: { sha256: string | null; size: number };
+  /** Solo en ignore: linea que se anade y a que fichero (relativo al root). */
+  edit?: { file: string; line: string };
 }
 
 export interface Plan {
