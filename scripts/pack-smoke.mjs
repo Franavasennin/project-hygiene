@@ -28,6 +28,13 @@ try {
   });
 
   if (!hygiene(['--help']).includes('Comandos:')) throw new Error('--help no muestra el uso');
+  // Como lo usa la gente: por el enlace de node_modules/.bin (en Windows es
+  // un .cmd que no se puede lanzar sin shell, asi que solo en POSIX).
+  if (!win) {
+    const link = path.join(app, 'node_modules', '.bin', 'hygiene');
+    const viaLink = execFileSync(link, ['--help'], { cwd: app, encoding: 'utf8' });
+    if (!viaLink.includes('Comandos:')) throw new Error('el binario no responde por node_modules/.bin');
+  }
   if (!hygiene(['explain', 'FS-TEMP-001']).includes('FS-TEMP-001')) throw new Error('las reglas no viajan en el paquete');
   hygiene(['init', '.']);
   if (!readFileSync(path.join(app, '.gitignore'), 'utf8').includes('node_modules/')) {

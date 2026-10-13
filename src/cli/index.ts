@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runAudit } from '../audit.js';
@@ -328,10 +329,24 @@ export async function main(argv: string[], print: Printer = console.log): Promis
   }
 }
 
-const invocadoDirectamente = process.argv[1]
-  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function realOrResolved(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
 
-if (invocadoDirectamente) {
+/**
+ * Node carga el modulo por su ruta real, pero argv[1] conserva el enlace
+ * (node_modules/.bin/hygiene, o /var -> /private/var en macOS). Se comparan
+ * rutas reales; si no, el binario instalado no ejecutaria nada.
+ */
+export function invokedDirectly(argv1: string | undefined, moduleFile: string): boolean {
+  return argv1 !== undefined && realOrResolved(argv1) === realOrResolved(moduleFile);
+}
+
+if (invokedDirectly(process.argv[1], fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },
     (err) => {
