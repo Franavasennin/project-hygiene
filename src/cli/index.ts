@@ -31,7 +31,7 @@ Comandos:
   plan [ruta]            Operaciones propuestas con ID, sin modificar nada
   explain <RULE-ID>      Por que existe una regla
   approve <OP-ID...>     Registra aprobaciones (o --risk <nivel>, o --reset)
-  clean --approved       Mueve a cuarentena solo lo aprobado
+  clean --approved       Ejecuta lo aprobado: cuarentena e ignore
   restore <OP-ID>        Devuelve un fichero de la cuarentena verificando su hash
 
 Opciones:
@@ -225,9 +225,10 @@ export async function main(argv: string[], print: Printer = console.log): Promis
 
       let failed = 0;
       for (const o of result.outcomes) {
-        if (o.status === 'quarantined') {
-          print(`  cuarentena  ${o.opId}  ${o.path}  -> ${o.entry}`);
-        } else {
+        if (o.status === 'quarantined') print(`  cuarentena  ${o.opId}  ${o.path}  -> ${o.entry}`);
+        else if (o.status === 'applied') print(`  ignorado    ${o.opId}  ${o.path}  -> ${o.entry}`);
+        else if (o.status === 'unchanged') print(`  sin cambios ${o.opId}  ${o.path}`);
+        else {
           if (o.status === 'failed') failed += 1;
           print(`  ${o.status === 'failed' ? 'fallo' : 'omitida'}  ${o.opId}  ${o.path}  (${o.reason})`);
         }
