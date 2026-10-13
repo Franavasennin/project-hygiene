@@ -24,6 +24,14 @@ export interface Manifest {
   reason: string;
   restorable: boolean;
   restore_report: { permissions: PermissionRestore } | null;
+  /** Ausente en manifiestos del plan 2: equivale a 'quarantine'. */
+  kind?: 'quarantine' | 'edit';
+  /**
+   * Solo en ediciones. En ellas, quarantine_path es la copia previa ('' si el
+   * fichero no existia), sha256 es la huella posterior y source el fichero
+   * editado. El estado 'quarantined' significa "aplicada".
+   */
+  edit?: { before_sha256: string | null; after_sha256: string } | null;
 }
 
 export interface QuarantineEntry {
@@ -35,9 +43,9 @@ export interface QuarantineEntry {
 export class InvalidEntryRefError extends Error {}
 
 const MANIFEST = 'manifest.json';
-const OP_REF = /^OP-\d{6}$/;
+const OP_REF = /^(OP|INIT)-\d{6}$/;
 // Formato cerrado: impide que una referencia con '..' salga de la cuarentena.
-const ENTRY_REF = /^\d{4}-\d{2}-\d{2}\/OP-\d{6}(-\d+)?$/;
+const ENTRY_REF = /^\d{4}-\d{2}-\d{2}\/(OP|INIT)-\d{6}(-\d+)?$/;
 
 export function quarantineDir(home: string): string {
   return path.join(home, 'quarantine');
@@ -97,7 +105,7 @@ export async function findEntries(home: string, ref: string): Promise<Quarantine
     }
   }
   if (!OP_REF.test(ref)) {
-    throw new InvalidEntryRefError(`referencia no valida: ${ref}. Usa OP-000123 o AAAA-MM-DD/OP-000123`);
+    throw new InvalidEntryRefError(`referencia no valida: ${ref}. Usa OP-000123, INIT-000001 o AAAA-MM-DD/OP-000123`);
   }
 
   const found: QuarantineEntry[] = [];
