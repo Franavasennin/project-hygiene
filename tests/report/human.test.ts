@@ -74,6 +74,15 @@ describe('renderReport', () => {
     expect(out).toContain('y 2 mas');
   });
 
+  it('lista las reglas no soportadas en la plataforma', () => {
+    const out = renderReport({
+      ...base,
+      unsupported: [{ ruleId: 'SEC-PERM-001', reason: 'los permisos POSIX no existen en Windows' }],
+    });
+    expect(out).toContain('No soportado en esta plataforma');
+    expect(out).toContain('SEC-PERM-001');
+  });
+
   it('score.clean true muestra el estado LIMPIO', () => {
     const limpio = { ...base, findings: [], score: { ...base.score, clean: true, blockers: [] } };
     const out = renderReport(limpio);

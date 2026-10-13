@@ -23,6 +23,7 @@ export interface Rule {
   risk: Risk;
   confidence: number;
   deprecated?: boolean;
+  scope?: 'file' | 'project';
   docs?: string;
   evidence?: string[];
   match: MatchNode;
@@ -40,15 +41,24 @@ export interface Pack {
 const REGEX_KEYS = new Set(['path_regex', 'basename_regex', 'content_matches']);
 const MAX_MATCH_NODES = 256;
 
+/** Predicados que solo tienen sentido contra un candidato a proyecto. */
+const PROJECT_ONLY = new Set([
+  'project_status', 'has_child', 'is_git_repo', 'git_worktree_orphan',
+  'git_stash_older_than', 'git_branch_stale', 'git_branch_orphaned', 'in_git_history',
+]);
+
 /** Recorre el árbol `match` comprobando las regex y el tamaño del árbol. */
-function auditMatchTree(node: MatchNode, seen = { n: 0 }): void {
+function auditMatchTree(node: MatchNode, seen = { n: 0 }, scope: 'file' | 'project' = 'file'): void {
   seen.n += 1;
   if (seen.n > MAX_MATCH_NODES) {
     throw new PackValidationError(`arbol match demasiado grande (> ${MAX_MATCH_NODES} nodos)`);
   }
   for (const [key, value] of Object.entries(node)) {
+    if (scope === 'file' && PROJECT_ONLY.has(key)) {
+      throw new PackValidationError(`el predicado ${key} solo vale en reglas con scope: project`);
+    }
     if (key === 'all' || key === 'any' || key === 'none') {
-      for (const child of value as MatchNode[]) auditMatchTree(child, seen);
+      for (const child of value as MatchNode[]) auditMatchTree(child, seen, scope);
     } else if (REGEX_KEYS.has(key)) {
       try {
         assertSafeRegex(String(value));
@@ -78,7 +88,7 @@ function validateWith(
   for (const rule of pack.rules) {
     if (seenIds.has(rule.id)) throw new PackValidationError(`${source}: id duplicado ${rule.id}`);
     seenIds.add(rule.id);
-    auditMatchTree(rule.match);
+    auditMatchTree(rule.match, { n: 0 }, rule.scope ?? 'file');
   }
   return pack;
 }

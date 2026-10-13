@@ -90,3 +90,72 @@ rules:
       is_symlink: true
     suggests:
       - type: review
+
+  - id: FS-ROOT-001
+    title: Fichero suelto en la raiz del workspace
+    why: >
+      En un workspace con proyectos, un fichero de la raiz que no pertenece a
+      ninguno suele ser un resto de sesion. Un README, una licencia o la
+      configuracion del propio workspace son legitimos.
+    severity: low
+    risk: medium
+    confidence: 0.6
+    match:
+      all:
+        - root_is_workspace: true
+        - is_file: true
+        - in_project: false
+        - none:
+            - depth_gt: 1
+            - basename_regex: '(?i)^(readme|license|licence|changelog|contributing|security)(\.[a-z]+)?$'
+            - basename_regex: '^\.(gitignore|gitattributes|editorconfig|hygienerc\.yml)$'
+            - basename_regex: '^(CLAUDE|AGENTS|GEMINI)\.md$'
+    suggests:
+      - type: review
+
+  - id: FS-BOUNDARY-001
+    title: Frontera de proyecto con confianza insuficiente
+    why: >
+      El directorio tiene senales de proyecto, pero no suficientes. No se
+      propone ninguna operacion sobre su contenido y su presencia impide
+      declarar el workspace limpio hasta que una persona lo aclare.
+    severity: info
+    risk: unknown
+    confidence: 1
+    scope: project
+    match:
+      project_status: unknown-boundary
+    suggests:
+      - type: review
+
+  - id: FS-GENERATED-001
+    title: Directorio generado sin ignorar
+    why: >
+      Un node_modules, dist o .venv es reproducible y no debe versionarse.
+      Nunca se pone en cuarentena: solo se comprueba que este ignorado.
+    severity: medium
+    risk: safe
+    confidence: 0.9
+    match:
+      all:
+        - is_dir: true
+        - basename_regex: '^(node_modules|dist|build|target|coverage|\.venv|venv|__pycache__|\.next)$'
+        - in_git_repo: true
+        - ignored_by_git: false
+    suggests:
+      - type: ignore
+      - type: review
+
+  - id: FS-EMPTY-001
+    title: Directorio vacio
+    why: Un directorio vacio no aporta nada y Git ni siquiera lo conserva.
+    severity: info
+    risk: safe
+    confidence: 0.7
+    match:
+      all:
+        - is_dir: true
+        - is_symlink: false
+        - is_empty: true
+    suggests:
+      - type: review

@@ -128,7 +128,7 @@ Lo que **no** incluye todavía:
 
 ## Reglas disponibles
 
-16 reglas repartidas en cuatro ejes.
+32 reglas repartidas en cuatro ejes.
 
 ### Sistema de ficheros (`rules/filesystem.yml`)
 
@@ -140,6 +140,10 @@ Lo que **no** incluye todavía:
 | FS-DUP-001 | Fichero duplicado por contenido |
 | FS-DEPTH-001 | Anidamiento excesivo |
 | FS-SYMLINK-001 | Enlace simbólico |
+| FS-ROOT-001 | Fichero suelto en la raíz del workspace |
+| FS-BOUNDARY-001 | Frontera de proyecto con confianza insuficiente |
+| FS-GENERATED-001 | Directorio generado sin ignorar |
+| FS-EMPTY-001 | Directorio vacío |
 
 ### Git (`rules/git.yml`)
 
@@ -148,6 +152,11 @@ Lo que **no** incluye todavía:
 | GIT-IGNORE-002 | Artefacto generado versionado |
 | GIT-DIRTY-001 | Cambio sin commitear con antigüedad |
 | GIT-LARGE-001 | Fichero grande versionado |
+| GIT-NOREPO-001 | Proyecto con código y sin repositorio |
+| GIT-IGNORE-001 | Repositorio sin .gitignore |
+| GIT-WORKTREE-001 | Worktree sin repositorio padre |
+| GIT-STASH-001 | Stash antiguo |
+| GIT-BRANCH-001 | Rama inactiva |
 
 ### Seguridad (`rules/security.yml`)
 
@@ -157,6 +166,9 @@ Lo que **no** incluye todavía:
 | SEC-KEY-001 | Clave privada en el árbol |
 | SEC-CERT-001 | Certificado con clave pública |
 | SEC-ENTROPY-001 | Posible secreto por alta entropía |
+| SEC-DB-001 | Volcado de base de datos versionado |
+| SEC-PERM-001 | Clave privada con permisos abiertos |
+| SEC-HIST-001 | Secreto en el histórico de Git |
 
 ### Agentes de IA (`rules/ai.yml`)
 
@@ -165,6 +177,14 @@ Lo que **no** incluye todavía:
 | AI-SCRATCH-001 | Fichero de trabajo de agente fuera de .tmp |
 | AI-SCRIPT-001 | Script de un solo uso en la raíz |
 | AI-STATE-001 | Estado o caché de agente sin ignorar |
+| AI-DOC-001 | Fichero de instrucciones de agente duplicado |
+| AI-REPORT-001 | Informe generado que nada referencia |
+| AI-OUTSIDE-001 | Directorio de agente fuera de todo proyecto |
+| AI-DUPDOC-001 | Documentación que duplica el README |
+
+Las reglas de proyecto (`scope: project`) se evalúan una vez por proyecto
+detectado, incluida la raíz. `SEC-PERM-001` se reporta como no soportada en
+Windows, sin restar puntos ni bloquear el estado limpio.
 
 ## Licencia
 

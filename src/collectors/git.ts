@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitFacts } from '../core/types.js';
+import type { BranchFact, GitFacts } from '../core/types.js';
 
 const run = promisify(execFile);
 
@@ -39,24 +39,52 @@ function splitNul(s: string | null): string[] {
 }
 
 /**
- * Resuelve la rama por defecto en el orden acordado: origin/HEAD, luego main,
- * luego master. Devuelve null si ninguna existe, y en ese caso las reglas de
- * rama no emiten hallazgo.
+ * Resuelve la rama por defecto en el orden de la spec §7: origin/HEAD, la
+ * rama configurada en .hygienerc.yml, main, master. null si ninguna existe;
+ * en ese caso las reglas de rama no emiten hallazgo.
  */
-async function resolveDefaultBranch(cwd: string): Promise<string | null> {
+async function resolveDefaultBranch(cwd: string, configured?: string): Promise<string | null> {
   const head = await git(cwd, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
   if (head) {
     const name = head.trim().split('/').pop();
     if (name) return name;
   }
-  for (const candidate of ['main', 'master']) {
+  const candidates = configured ? [configured, 'main', 'master'] : ['main', 'master'];
+  for (const candidate of candidates) {
     const ok = await git(cwd, ['rev-parse', '--verify', '--quiet', candidate]);
     if (ok) return candidate;
   }
   return null;
 }
 
-export async function collectGit(cwd: string): Promise<GitFacts> {
+async function collectBranches(cwd: string, defaultBranch: string | null): Promise<BranchFact[]> {
+  const raw = lines(await git(cwd, [
+    'for-each-ref', 'refs/heads', '--format=%(refname:short)%09%(upstream:short)%09%(committerdate:unix)',
+  ]));
+  const merged = defaultBranch
+    ? new Set(lines(await git(cwd, ['branch', '--merged', defaultBranch, '--format=%(refname:short)'])))
+    : new Set<string>();
+  return raw
+    .map((line) => {
+      const [name = '', upstream = '', ts = '0'] = line.split('\t');
+      return { name, upstream: upstream || null, lastCommitMs: Number(ts) * 1000, merged: merged.has(name) };
+    })
+    .filter((b) => b.name !== '');
+}
+
+async function collectHistory(cwd: string, limit: number): Promise<{ paths: Set<string>; truncated: boolean }> {
+  const total = Number((await git(cwd, ['rev-list', '--all', '--count']))?.trim() ?? '0');
+  const out = await git(cwd, ['log', '--all', '-n', String(limit), '--name-only', '--format=', '-z']);
+  const paths = new Set(splitNul(out).map((p) => p.replace(/^\n+/, '')).filter(Boolean));
+  return { paths, truncated: total > limit };
+}
+
+export interface GitOptions {
+  defaultBranch?: string;
+  maxHistoryCommits?: number;
+}
+
+export async function collectGit(cwd: string, opts: GitOptions = {}): Promise<GitFacts> {
   const rootOut = await git(cwd, ['rev-parse', '--show-toplevel']);
   if (!rootOut) return empty();
 
@@ -86,16 +114,30 @@ export async function collectGit(cwd: string): Promise<GitFacts> {
   }
 
   const branch = (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']))?.trim() ?? null;
-  const stashes = lines(await git(cwd, ['stash', 'list'])).length;
+  const stashTimesMs = lines(await git(cwd, ['stash', 'list', '--format=%ct']))
+    .map((s) => Number(s) * 1000)
+    .filter((n) => Number.isFinite(n));
+  const ignoredDirs = new Set(
+    splitNul(await git(cwd, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z']))
+      .filter((p) => p.endsWith('/'))
+      .map((p) => p.slice(0, -1)),
+  );
+  const defaultBranch = await resolveDefaultBranch(cwd, opts.defaultBranch);
+  const history = await collectHistory(cwd, opts.maxHistoryCommits ?? 5_000);
 
   return {
     isRepo: true,
     root: rootOut.trim(),
     currentBranch: branch,
-    defaultBranch: await resolveDefaultBranch(cwd),
+    defaultBranch,
     trackedFiles: tracked,
     ignoredFiles: ignored,
     dirtyFiles: dirty,
-    stashCount: stashes,
+    stashCount: stashTimesMs.length,
+    ignoredDirs,
+    stashTimesMs,
+    branches: await collectBranches(cwd, defaultBranch),
+    historyPaths: history.paths,
+    historyTruncated: history.truncated,
   };
 }

@@ -1,20 +1,22 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import type { AuditResult, FileEntry, Inventory } from './core/types.js';
+import type { AuditResult, FileEntry, Inventory, ProjectCandidate } from './core/types.js';
 import { Budget, DEFAULT_LIMITS, type Limits } from './core/limits.js';
 import { detectProjects } from './detector/detect.js';
 import { walk } from './collectors/filesystem.js';
-import { collectGit } from './collectors/git.js';
+import { collectGitByProject, countChildren, gitFor, isWorkspace } from './collectors/workspace.js';
 import { createContentCache, type ContentCache } from './collectors/content.js';
 import { loadPacks } from './rules/schema.js';
 import { evaluateAll } from './engine/evaluate.js';
-import type { EvalContext } from './engine/predicates.js';
+import type { EvalContext, WorkspaceFacts } from './engine/predicates.js';
 import { computeScore } from './scorer/score.js';
 
 export interface AuditOptions {
   root: string;
   rulesDir: string;
   limits?: Partial<Limits>;
+  /** Rama por defecto configurada (`git.default_branch`). */
+  defaultBranch?: string;
 }
 
 export interface AuditFacts {
@@ -122,12 +124,20 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
   // en `Inventory`, pero un directorio ilegible puede ocultar ficheros fuente,
   // asi que se usa para marcar las referencias como incompletas.
   const { files, truncated, unreadable } = await walk(options.root, budget);
-  const projects = await detectProjects(options.root);
-  // collectGit(cwd) devuelve los GitFacts del repo que contiene `cwd` (o un
-  // GitFacts "vacio" con isRepo=false si no hay repo). No hay un concepto de
-  // "por proyecto" en la firma real; se usa una unica clave '.' cuando el
-  // root es un repo, igual que en el diseno de referencia.
-  const git = await collectGit(options.root);
+  const projects: ProjectCandidate[] = await detectProjects(options.root);
+
+  // El root no esta en el inventario; las reglas de proyecto lo necesitan
+  // como entrada (candidato '.').
+  const rootEntry: FileEntry = {
+    path: '.', absPath: options.root, isDir: true, isSymlink: false,
+    size: 0, mtimeMs: 0, depth: 0, notDescended: false,
+  };
+  const byPath = new Map<string, FileEntry>([['.', rootEntry], ...files.map((f) => [f.path, f] as const)]);
+
+  const gitByProject = await collectGitByProject(options.root, projects, byPath, {
+    defaultBranch: options.defaultBranch,
+    maxHistoryCommits: budget.limits.maxGitHistoryCommits,
+  });
 
   const inventory: Inventory = {
     root: options.root,
@@ -135,14 +145,19 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
     truncated,
     files,
     projects,
-    gitByProject: git.isRepo ? { '.': git } : {},
+    gitByProject,
   };
 
   const content = createContentCache(budget);
   const duplicates = await duplicateHashes(files, content, budget);
   const refs = await findReferences(files, budget);
-  const byPath = new Map(files.map((f) => [f.path, f]));
   const now = Date.now();
+  const workspace: WorkspaceFacts = {
+    projects,
+    rootIsWorkspace: isWorkspace(projects),
+    childCounts: countChildren(files),
+    entryAt: (p) => byPath.get(p),
+  };
 
   // Si la ruta pedida no esta en el inventario recorrido (byPath), se degrada
   // con un FileEntry sintetico minimo en vez de lanzar una excepcion que
@@ -164,20 +179,26 @@ export async function collectAudit(options: AuditOptions): Promise<CollectedAudi
     };
     return {
       entry,
-      git: git.isRepo ? git : null,
+      git: gitFor(gitByProject, p),
       content,
       duplicateHashes: duplicates,
       referencedPaths: refs.referenced,
       now,
+      workspace,
     };
   };
 
   const packs = await loadPacks(options.rulesDir);
-  const { findings, limits } = await evaluateAll({ inventory, packs, budget, makeContext });
+  const projectEntries = projects
+    .map((c) => byPath.get(c.path))
+    .filter((e): e is FileEntry => e !== undefined);
+  const { findings, limits, unsupported } = await evaluateAll({
+    inventory, packs, budget, makeContext, projectEntries,
+  });
   const score = computeScore(findings, limits);
 
   return {
-    result: { inventory, findings, limits, score },
+    result: { inventory, findings, limits, score, unsupported },
     facts: {
       referenced: refs.referenced,
       referencesComplete: refs.complete && !truncated && unreadable.length === 0,
